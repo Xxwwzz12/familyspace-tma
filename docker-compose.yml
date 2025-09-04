@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  # Сервис основной базы данных PostgreSQL
+  postgres:
+    image: postgres:16-alpine # Используем легкий образ на Alpine Linux
+    container_name: familyspace-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: familyspace_dev     # Имя базы данных по умолчанию
+      POSTGRES_USER: fs_user           # Пользователь БД (НЕ пароль от Docker!)
+      POSTGRES_PASSWORD: '#u6F$4Gp@Kz!8vQ2%bL9&' # Пароль пользователя БД 
+    ports:
+      - "5432:5432" # Пробрасываем порт 5432 контейнера на порт 5432 локальной машины
+    volumes:
+      - postgres_data:/var/lib/postgresql/data # Сохраняем данные БД в именованный том
+    networks:
+      - familyspace-network
+
+  # Сервис кеширования и очередей Redis
+  redis:
+    image: redis:7-alpine
+    container_name: familyspace-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - familyspace-network
+
+  # Сервис объектного хранилища (альтернатива AWS S3)
+  minio:
+    image: minio/minio
+    container_name: familyspace-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: 'familyspace_root' # Логин для доступа к MinIO (замените в продакшене!)
+      MINIO_ROOT_PASSWORD: 'yT3m&W7s#eR5qX$kP9jZ*' # Пароль для доступа к MinIO (замените в продакшене!)
+    ports:
+      - "9000:9000" # Порт для API
+      - "9001:9001" # Порт для Web UI
+    command: server /data --console-address ":9001" # Запускаем сервер с Web интерфейсом
+    volumes:
+      - minio_data:/data
+    networks:
+      - familyspace-network
+
+# Определяем тома для постоянного хранения данных
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+# Определяем сеть для изоляции сервисов нашего проекта
+networks:
+  familyspace-network:
+    driver: bridge
