@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  telegramId BigInt   @unique
+  firstName String
+  lastName  String?
+  username  String?
+  photoUrl  String?
+  isBot     Boolean  @default(false)
+
+  families FamilyMembers[]
+  createdEvents Event[]
+  createdTasks  Task[]
+  createdFiles  File[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Family {
+  id     String @id @default(cuid())
+  name   String?
+  inviteCode String @unique @default(cuid())
+
+  members FamilyMembers[]
+  events Event[]
+  lists  TaskList[]
+  files  File[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FamilyMembers {
+  id       String @id @default(cuid())
+  userId   String
+  familyId String
+  role     MemberRole @default(USER)
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, familyId])
+}
+
+enum MemberRole {
+  ADMIN
+  USER
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  date        DateTime
+  color       String?
+  isPrivate   Boolean  @default(false)
+
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  familyId String
+
+  creator   User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  creatorId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TaskList {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  familyId String
+
+  tasks Task[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  isCompleted Boolean  @default(false)
+
+  list     TaskList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  listId   String
+
+  creator   User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  creatorId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model File {
+  id          String   @id @default(cuid())
+  name        String
+  size        Int
+  key         String   @unique
+  mimeType    String
+
+  family   Family @relation(fields: [familyId], references: [id], onDelete: Cascade)
+  familyId String
+
+  creator   User @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  creatorId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
