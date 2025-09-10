@@ -1,3 +1,5 @@
+// Импорт обработчика BigInt (должен быть первым)
+import './utils/bigint-serializer';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
