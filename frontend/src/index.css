@@ -11,6 +11,12 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Telegram theme variables with fallbacks */
+  --tg-theme-bg-color: #ffffff;
+  --tg-theme-text-color: #000000;
+  --tg-theme-button-color: #40a7e3;
+  --tg-theme-button-text-color: #ffffff;
 }
 
 a {
@@ -28,6 +34,10 @@ body {
   place-items: center;
   min-width: 320px;
   min-height: 100vh;
+  
+  /* Используем переменные Telegram */
+  background-color: var(--tg-theme-bg-color);
+  color: var(--tg-theme-text-color);
 }
 
 h1 {
@@ -64,5 +74,13 @@ button:focus-visible {
   }
   button {
     background-color: #f9f9f9;
+  }
+}
+
+/* Telegram theme dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tg-theme-bg-color: #0f0f0f;
+    --tg-theme-text-color: #ffffff;
   }
 }

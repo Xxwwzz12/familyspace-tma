@@ -1,24 +1,29 @@
-// Импорт обработчика BigInt (должен быть первым)
-import './utils/bigint-serializer';
 import express from 'express';
-import cors from 'cors';
 import helmet from 'helmet';
-import dotenv from 'dotenv';
+import cors from 'cors';
 import { mainRouter } from './routes';
+import authRoutes from './routes/auth.routes';
 
-dotenv.config();
+const app = express();
 
-export const app = express();
-
-// Middleware
 app.use(helmet());
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:5173', 'https://familyspace-tma.vercel.app'],
+  credentials: true,
+}));
 app.use(express.json());
 
-// Routes
+// Логирование всех входящих запросов
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} ${req.method} ${req.path}`);
+  next();
+});
+
+app.use('/api/auth', authRoutes);
 app.use('/api', mainRouter);
 
-// Health check endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'OK', message: 'Server is running!' });
+  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
+
+export default app;

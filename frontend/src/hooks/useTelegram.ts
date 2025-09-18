@@ -12,13 +12,31 @@ interface TelegramUser {
 }
 
 const useTelegram = () => {
+  // Правильная логика определения нахождения в Telegram
+  const webApp = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined;
+  const isTMA = !!webApp;
+  
+  // Используем данные из safeWebApp
   const user = safeWebApp.initDataUnsafe?.user as TelegramUser | undefined;
-  const isInTelegram = isTelegramEnv();
+
+  // Добавляем логирование
+  console.log('📱 useTelegram hook. isTMA:', isTMA, 'webApp:', webApp);
+  
+  // Дополнительное логирование для отладки
+  if (isTMA) {
+    console.log('✅ Приложение запущено внутри Telegram');
+    console.log('👤 Пользователь:', user);
+    console.log('🔧 Версия WebApp:', webApp?.version);
+    console.log('📱 Платформа:', webApp?.platform);
+  } else {
+    console.log('🌐 Приложение запущено вне Telegram (браузер)');
+  }
 
   return {
     webApp: safeWebApp,
     user,
-    isInTelegram,
+    isTMA,
+    isInTelegram: isTMA, // для обратной совместимости
     // Вспомогательные методы
     isDevelopment: process.env.NODE_ENV === 'development'
   };

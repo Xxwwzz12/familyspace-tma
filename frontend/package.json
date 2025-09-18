@@ -10,10 +10,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@telegram-apps/sdk": "^3.10.0",
+    "@telegram-apps/sdk": "^3.11.5",
+    "@telegram-apps/sdk-react": "^3.3.7",
     "axios": "^1.11.0",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
     "react-router-dom": "^7.8.2",
     "zustand": "^5.0.8"
   },

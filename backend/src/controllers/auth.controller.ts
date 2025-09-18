@@ -4,47 +4,43 @@ import { validateInitData } from '../services/telegram-auth.service';
 import { findOrCreateUser } from '../services/user.service';
 import { generateToken } from '../services/jwt.service';
 
-export async function authInit(req: Request, res: Response) {
+// Основной эндпоинт аутентификации
+export const authInit = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log('Received initData:', req.body.initData);
+    
     const { initData } = req.body;
 
     if (!initData) {
-      return res.status(400).json({ error: 'initData is required' });
+      res.status(400).json({ error: 'initData is required' });
+      return;
     }
 
-    // Валидация данных от Telegram
-    const telegramUser = await validateInitData(initData);
-
-    // Поиск или создание пользователя в БД
+    const telegramUser = await validateInitData(initData, { debug: true });
     const user = await findOrCreateUser(telegramUser);
-
-    // Генерация JWT токена
     const token = generateToken(user.id);
 
-    // Возвращаем токен и данные пользователя
     res.json({
       token,
       user: {
-        id: user.id,
+        id: user.id.toString(),
         firstName: user.firstName,
         lastName: user.lastName,
         username: user.username,
-        telegramId: user.telegramId,
+        telegramId: user.telegramId.toString(),
       },
     });
   } catch (error) {
     console.error('Auth init error:', error);
-    
-    // Определяем подходящий статус ошибки
     const statusCode = error.message.includes('validation') ? 400 : 500;
     res.status(statusCode).json({ 
       error: error.message || 'Internal server error' 
     });
   }
-}
+};
 
-// Временный эндпоинт для тестирования (создает уникальных пользователей при каждом вызове)
-export const authTest = async (req: Request, res: Response) => {
+// Эндпоинт для тестирования
+export const testAuth = async (req: Request, res: Response): Promise<void> => {
   try {
     // Генерируем случайный telegramId для каждого запроса
     const randomTelegramId = Math.floor(Math.random() * 1000000000);
@@ -60,25 +56,21 @@ export const authTest = async (req: Request, res: Response) => {
       allows_write_to_pm: true
     };
 
-    // Поиск или создание пользователя в БД
     const user = await findOrCreateUser(telegramUser);
-    
-    // Генерация JWT токена
     const token = generateToken(user.id);
 
     res.json({
       token,
       user: {
-        id: user.id,
+        id: user.id.toString(),
         firstName: user.firstName,
         lastName: user.lastName,
         username: user.username,
-        telegramId: user.telegramId.toString()
-      },
-      message: "Тестовый пользователь создан/найден"
+        telegramId: user.telegramId.toString(),
+      }
     });
   } catch (error) {
-    console.error('Error in auth test:', error);
-    res.status(500).json({ message: error.message });
+    console.error('Error in testAuth:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
