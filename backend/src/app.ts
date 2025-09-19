@@ -19,7 +19,7 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use('/api/auth', authRoutes);
+app.use('/auth', authRoutes); // Изменено с '/api/auth' на '/auth'
 app.use('/api', mainRouter);
 
 app.get('/health', (req, res) => {
