@@ -1,7 +1,7 @@
 export interface User {
   id: string;
   firstName: string;
-  lastName?: string;
-  username?: string;
-  telegramId: number;
+  lastName: string | null;
+  username: string | null;
+  telegramId: string;
 }

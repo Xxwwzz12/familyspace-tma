@@ -1,5 +1,4 @@
 import { safeWebApp } from '@/utils/initTelegramSDK';
-import { isTelegramEnv } from '@/utils/env';
 
 interface TelegramUser {
   id: number;
@@ -22,12 +21,13 @@ const useTelegram = () => {
   // Добавляем логирование
   console.log('📱 useTelegram hook. isTMA:', isTMA, 'webApp:', webApp);
   
-  // Дополнительное логирование для отладки
+  // Дополнительное логирование для отладки с временным решением через any
   if (isTMA) {
     console.log('✅ Приложение запущено внутри Telegram');
     console.log('👤 Пользователь:', user);
-    console.log('🔧 Версия WebApp:', webApp?.version);
-    console.log('📱 Платформа:', webApp?.platform);
+    // Временное решение для дебага с приведением к any
+    console.log('🔧 Версия WebApp:', (webApp as any)?.version);
+    console.log('📱 Платформа:', (webApp as any)?.platform);
   } else {
     console.log('🌐 Приложение запущено вне Telegram (браузер)');
   }
@@ -36,7 +36,7 @@ const useTelegram = () => {
     webApp: safeWebApp,
     user,
     isTMA,
-    isInTelegram: isTMA, // для обратной совместимости
+    isInTelegram: isTMA,
     // Вспомогательные методы
     isDevelopment: process.env.NODE_ENV === 'development'
   };

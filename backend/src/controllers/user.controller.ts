@@ -1,11 +1,17 @@
-import { Request, Response } from 'express';
-import { PrismaClient, Role } from '@prisma/client';
+import { Response } from 'express';
+import { AuthRequest } from '../middleware/auth.middleware';
+import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-export async function getCurrentUser(req: Request, res: Response) {
+export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
     const user = req.user;
+
+    if (!user) {
+      res.status(401).json({ error: 'User not authenticated' });
+      return;
+    }
 
     const families = await prisma.familyMembers.findMany({
       where: { userId: user.id },
@@ -14,32 +20,29 @@ export async function getCurrentUser(req: Request, res: Response) {
           select: {
             id: true,
             name: true,
-            createdAt: true
-          }
-        }
-      }
+            createdAt: true,
+          },
+        },
+      },
     });
 
-    const response = {
-      user: {
-        id: user.id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        username: user.username,
-        telegramId: user.telegramId,
-        createdAt: user.createdAt
-      },
-      families: families.map(member => ({
-        id: member.family.id,
-        name: member.family.name,
-        role: member.role,
-        joinedAt: member.createdAt
-      }))
-    };
+    const familiesWithRole = families.map((member) => ({
+      id: member.family.id,
+      name: member.family.name,
+      role: member.role,
+      joinedAt: member.family.createdAt, // Используем дату создания семьи
+    }));
 
-    res.json(response);
+    res.json({
+      id: user.id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      username: user.username,
+      telegramId: user.telegramId.toString(),
+      families: familiesWithRole,
+    });
   } catch (error) {
-    console.error('Get current user error:', error);
+    console.error('Error getting current user:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
-}
+};

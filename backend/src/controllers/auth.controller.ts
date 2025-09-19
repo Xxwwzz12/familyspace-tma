@@ -32,9 +32,18 @@ export const authInit = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error) {
     console.error('Auth init error:', error);
-    const statusCode = error.message.includes('validation') ? 400 : 500;
+    
+    // Обработка ошибки с проверкой типа
+    let errorMessage = 'Internal server error';
+    let statusCode = 500;
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+      statusCode = error.message.includes('validation') ? 400 : 500;
+    }
+    
     res.status(statusCode).json({ 
-      error: error.message || 'Internal server error' 
+      error: errorMessage
     });
   }
 };
@@ -71,6 +80,14 @@ export const testAuth = async (req: Request, res: Response): Promise<void> => {
     });
   } catch (error) {
     console.error('Error in testAuth:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    
+    // Обработка ошибки с проверкой типа
+    let errorMessage = 'Internal server error';
+    
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    
+    res.status(500).json({ error: errorMessage });
   }
 };

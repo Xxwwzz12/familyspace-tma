@@ -1,17 +1,12 @@
-// src/controllers/family.controller.ts
+// backend/src/controllers/family.controller.ts
 import { Response } from 'express';
-import { AuthRequest } from '../middleware/auth.middleware';
-import { familyService } from '../services/family.service';
 import { body, param } from 'express-validator';
+import { AuthRequest } from '../middleware/auth.middleware';
+import * as familyService from '../services/family.service';
 
-// Отладочная информация для проверки импорта сервиса
-console.log('Family service imported:', familyService);
-console.log('Family service methods:', Object.keys(familyService));
-
-// Используем именованный экспорт объекта контроллера
 export const familyController = {
   // Создание новой семьи
-  createFamily: async (req: AuthRequest, res: Response) => {
+  createFamily: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       console.log('Create family endpoint called');
       console.log('Request params:', req.params);
@@ -24,11 +19,13 @@ export const familyController = {
       console.log('Extracted userId:', userId);
       
       if (!userId) {
-        return res.status(401).json({ error: 'User not authenticated' });
+        res.status(401).json({ error: 'User not authenticated' });
+        return;
       }
       
       if (!name) {
-        return res.status(400).json({ error: 'Family name is required' });
+        res.status(400).json({ error: 'Family name is required' });
+        return;
       }
 
       console.log('Calling createFamily with:', { userId, name });
@@ -42,7 +39,7 @@ export const familyController = {
   },
 
   // Генерация инвайт-кода
-  generateInvite: async (req: AuthRequest, res: Response) => {
+  generateInvite: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       console.log('Generate invite endpoint called');
       console.log('Request params:', req.params);
@@ -54,18 +51,21 @@ export const familyController = {
       console.log('Extracted userId:', userId, 'familyId:', familyId);
       
       if (!userId) {
-        return res.status(401).json({ error: 'User not authenticated' });
+        res.status(401).json({ error: 'User not authenticated' });
+        return;
       }
       
       if (!familyId) {
-        return res.status(400).json({ error: 'Family ID is required' });
+        res.status(400).json({ error: 'Family ID is required' });
+        return;
       }
 
       console.log('Calling checkUserIsAdmin with:', { familyId, userId });
       const isAdmin = await familyService.checkUserIsAdmin(familyId, userId);
       
       if (!isAdmin) {
-        return res.status(403).json({ error: 'Access denied. Admin rights required' });
+        res.status(403).json({ error: 'Access denied. Admin rights required' });
+        return;
       }
 
       console.log('Calling generateInviteCode with:', { familyId, userId });
@@ -79,7 +79,7 @@ export const familyController = {
   },
 
   // Вступление в семью по инвайт-коду
-  joinFamily: async (req: AuthRequest, res: Response) => {
+  joinFamily: async (req: AuthRequest, res: Response): Promise<void> => {
     try {
       console.log('Join family endpoint called');
       console.log('Request params:', req.params);
@@ -91,11 +91,13 @@ export const familyController = {
       console.log('Extracted userId:', userId, 'inviteCode:', inviteCode);
       
       if (!userId) {
-        return res.status(401).json({ error: 'User not authenticated' });
+        res.status(401).json({ error: 'User not authenticated' });
+        return;
       }
       
       if (!inviteCode) {
-        return res.status(400).json({ error: 'Invite code is required' });
+        res.status(400).json({ error: 'Invite code is required' });
+        return;
       }
 
       console.log('Calling joinFamily with:', { inviteCode, userId });

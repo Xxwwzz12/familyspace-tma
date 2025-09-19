@@ -4,22 +4,25 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-declare global {
-  namespace Express {
-    interface Request {
-      user?: {
-        id: string;
-        telegramId: number;
-        firstName: string;
-        lastName: string | null;
-        username: string | null;
-        createdAt: Date;
-      };
-    }
-  }
+export interface AuthRequest extends Request {
+  user?: {
+    id: string;
+    telegramId: bigint;
+    firstName: string;
+    lastName: string | null;
+    username: string | null;
+    photoUrl: string | null; // Добавлено
+    isBot: boolean; // Добавлено
+    createdAt: Date;
+    updatedAt: Date; // Добавлено
+  };
 }
 
-export async function authMiddleware(req: Request, res: Response, next: NextFunction) {
+export const authMiddleware = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
   try {
     const authHeader = req.headers.authorization;
     
@@ -38,7 +41,10 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
         firstName: true,
         lastName: true,
         username: true,
-        createdAt: true
+        photoUrl: true, // Добавлено
+        isBot: true, // Добавлено
+        createdAt: true,
+        updatedAt: true // Добавлено
       }
     });
 
@@ -52,4 +58,4 @@ export async function authMiddleware(req: Request, res: Response, next: NextFunc
     console.error('Auth middleware error:', error);
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
-}
+};

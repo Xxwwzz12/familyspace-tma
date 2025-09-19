@@ -18,11 +18,13 @@ interface AuthState {
   login: (userData: User, token: string) => void;
   logout: () => void;
   testAuth: () => Promise<void>;
+  setToken: (token: string | null) => void;
+  setUser: (user: User | null) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       token: null,
       user: null,
       isLoading: true,
@@ -101,11 +103,10 @@ export const useAuthStore = create<AuthState>()(
       testAuth: async (): Promise<void> => {
         console.log('🛜 testAuth called');
         try {
-          const response = await apiClient.post('/auth/test'); // Используем POST без префикса /api
+          const response = await apiClient.post('/auth/test');
           const { token, user } = response.data;
           console.log('✅ testAuth success', token, user);
           
-          // Обновляем хранилище с новыми данными
           if (typeof window !== 'undefined') {
             localStorage.setItem('token', token);
           }
@@ -121,24 +122,54 @@ export const useAuthStore = create<AuthState>()(
           throw error;
         }
       },
+
+      setToken: (token: string | null) => {
+        console.log('🔑 setToken called with:', token);
+        
+        if (token && typeof window !== 'undefined') {
+          localStorage.setItem('token', token);
+        } else if (typeof window !== 'undefined') {
+          localStorage.removeItem('token');
+        }
+        
+        set({ token });
+      },
+
+      setUser: (user: User | null) => {
+        console.log('👤 setUser called with:', user);
+        set({ user });
+      },
     }),
     {
       name: 'auth-storage',
       onRehydrateStorage: () => (state) => {
         console.log('💾 Storage rehydrated', state);
+        if (state && typeof state === 'object') {
+          // Теперь безопасно использовать spread
+          return { ...state, isLoading: false };
+        }
+        return state;
       },
       partialize: (state) => ({
         token: state.token,
         user: state.user
       }),
-      merge: (persistedState, currentState) => ({
-        ...currentState,
-        ...persistedState,
-        initializeAuth: currentState.initializeAuth,
-        login: currentState.login,
-        logout: currentState.logout,
-        testAuth: currentState.testAuth
-      })
+      merge: (persistedState, currentState) => {
+        // Проверяем, что persistedState является объектом
+        if (persistedState && typeof persistedState === 'object') {
+          return {
+            ...currentState,
+            ...persistedState,
+            initializeAuth: currentState.initializeAuth,
+            login: currentState.login,
+            logout: currentState.logout,
+            testAuth: currentState.testAuth,
+            setToken: currentState.setToken,
+            setUser: currentState.setUser
+          };
+        }
+        return currentState;
+      }
     }
   )
 );

@@ -1,4 +1,3 @@
-import { init, retrieveLaunchParams, viewport } from '@telegram-apps/sdk';
 import { logger } from './logger';
 import { isTelegramEnv } from './env';
 
@@ -80,32 +79,12 @@ export const initializeWebApp = async () => {
     webApp = window.Telegram?.WebApp;
     console.log('✅ Telegram WebApp found in global object');
     logger.info('Telegram WebApp found in global object');
-    
-    // Монтируем viewport и обновляем layout
-    console.log('🔄 Монтирование viewport...');
-    logger.info('Mounting viewport...');
-    
-    viewport.mount({ timeout: 5000 })
-      .then(() => {
-        console.log('✅ Viewport mounted successfully');
-        logger.info('Viewport mounted successfully');
-        updateLayoutForViewport({
-          width: window.innerWidth,
-          height: window.innerHeight,
-          isExpanded: true,
-        });
-      })
-      .catch((error) => {
-        console.warn('⚠️ Viewport mounting timeout or error:', error);
-        logger.warn('Viewport mounting timeout or error:', error);
-      });
-    
     return;
   }
 
   try {
     // Пытаемся инициализировать через SDK
-    const { init } = await import('@telegram-apps/sdk');
+    const { init, viewport } = await import('@telegram-apps/sdk');
     init();
     // После инициализации получаем webApp из глобального объекта
     webApp = window.Telegram?.WebApp;
