@@ -4,6 +4,10 @@ export const isTelegramEnv = (): boolean => {
 };
 
 // Дополнительные утилиты для работы с окружением
-// Исправлено: теперь это функции, а не значения
 export const isDevelopment = (): boolean => import.meta.env.MODE === 'development';
 export const isProduction = (): boolean => import.meta.env.MODE === 'production';
+
+// Функция для получения базового URL API
+export const getApiBaseUrl = (): string => {
+  return import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+};

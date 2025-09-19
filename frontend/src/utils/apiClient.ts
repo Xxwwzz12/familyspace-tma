@@ -1,10 +1,10 @@
 import axios from 'axios';
 
-// Убедитесь, что это правильный URL вашего бэкенда
-const API_BASE_URL = 'http://localhost:3000/api';
+// Базовый URL API: используем переменную окружения VITE_API_URL, если не задана - localhost:3000/api
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 export const apiClient = axios.create({
-  baseURL: API_BASE_URL, // Теперь корректно: 'http://localhost:3000/api'
+  baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -25,7 +25,7 @@ apiClient.interceptors.request.use((request) => {
   return request;
 });
 
-// Интерцептор для обработки ошибок (добавляем, если его еще нет)
+// Интерцептор для обработки ошибок
 apiClient.interceptors.response.use(
   (response) => {
     return response;
