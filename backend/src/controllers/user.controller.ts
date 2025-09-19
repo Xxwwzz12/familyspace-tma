@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth.middleware';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, FamilyMembers, MemberRole } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -26,11 +26,18 @@ export const getCurrentUser = async (req: AuthRequest, res: Response): Promise<v
       },
     });
 
-    const familiesWithRole = families.map((member) => ({
+    const familiesWithRole = families.map((member: FamilyMembers & { 
+      family: { 
+        id: string; 
+        name: string | null; 
+        createdAt: Date; 
+      }; 
+      role: MemberRole;
+    }) => ({
       id: member.family.id,
       name: member.family.name,
       role: member.role,
-      joinedAt: member.family.createdAt, // Используем дату создания семьи
+      joinedAt: member.family.createdAt,
     }));
 
     res.json({

@@ -8,11 +8,16 @@ export interface AuthenticatedUser extends User {
 
 declare global {
   namespace Express {
-    interface Request {
+    export interface Request {
       user?: AuthenticatedUser;
+    }
+    
+    // Явно экспортируем интерфейс AuthRequest
+    export interface AuthRequest extends Request {
+      user: AuthenticatedUser;
     }
   }
 }
 
-// Экспорт для использования в других частях приложения
-export {};
+// Экспортируем AuthenticatedUser для использования в других частях приложения
+export { AuthenticatedUser };

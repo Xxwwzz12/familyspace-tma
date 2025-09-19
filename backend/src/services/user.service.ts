@@ -1,4 +1,4 @@
-import { PrismaClient, User } from '@prisma/client';
+import { PrismaClient, User, Prisma } from '@prisma/client';
 import { TelegramUser } from '../types/telegram';
 
 const prisma = new PrismaClient();
@@ -6,12 +6,14 @@ const prisma = new PrismaClient();
 export async function findOrCreateUser(telegramUser: TelegramUser): Promise<User> {
   const { id, first_name, last_name, username } = telegramUser;
   
-  return prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    // Поиск существующего пользователя
     const existingUser = await tx.user.findUnique({
       where: { telegramId: id }
     });
 
     if (existingUser) {
+      // Обновление данных при изменении
       return tx.user.update({
         where: { id: existingUser.id },
         data: {
@@ -22,6 +24,7 @@ export async function findOrCreateUser(telegramUser: TelegramUser): Promise<User
       });
     }
 
+    // Создание нового пользователя
     return tx.user.create({
       data: {
         telegramId: id,
