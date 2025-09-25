@@ -12,73 +12,69 @@ interface User {
 interface AuthState {
   token: string | null;
   user: User | null;
-  isLoading: boolean;
   isAuthenticated: boolean;
-  initializeAuth: () => Promise<void>;
-  login: (userData: User, token: string) => void;
+  isLoading: boolean;
+  initializeAuth: (initData: string | null) => Promise<void>;
+  login: (user: User, token: string) => void;
   logout: () => void;
-  testAuth: () => Promise<void>;
   setToken: (token: string | null) => void;
   setUser: (user: User | null) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       token: null,
       user: null,
-      isLoading: true,
       isAuthenticated: false,
+      isLoading: true,
 
-      initializeAuth: async () => {
-        console.log('🔄 initializeAuth called');
-        
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-        
-        if (!token) {
-          console.log('❌ No token found in localStorage');
-          set({ isLoading: false, isAuthenticated: false });
-          return;
-        }
-
-        console.log('✅ Token found in localStorage, validating...');
+      initializeAuth: async (initData: string | null) => {
+        console.log('🔄 initializeAuth called with initData:', initData);
         
         try {
-          const response = await apiClient.get('/user/me', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
+          let response;
           
-          console.log('✅ Token validation successful, user:', response.data);
-          
-          set({ 
-            token,
-            user: response.data,
-            isAuthenticated: true,
-            isLoading: false 
-          });
-        } catch (error) {
-          console.error('❌ Token validation failed:', error);
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('token');
+          if (initData) {
+            // Настоящая Telegram аутентификация
+            console.log('🔐 Authenticating with Telegram initData');
+            response = await apiClient.post('/auth/init', { initData });
+          } else {
+            // Тестовая аутентификация (fallback)
+            console.log('🧪 Using test authentication');
+            response = await apiClient.post('/auth/test');
           }
+          
+          const { user, token } = response.data;
+          
+          // Сохраняем токен
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('auth_token', token);
+          }
+          
           set({ 
-            token: null,
-            user: null,
-            isAuthenticated: false,
+            user, 
+            token,
+            isAuthenticated: true, 
             isLoading: false 
           });
+          
+          console.log('✅ Authentication successful:', user);
+        } catch (error) {
+          console.error('❌ Authentication failed:', error);
+          set({ isLoading: false });
         }
       },
 
-      login: (userData, token) => {
-        console.log('🔐 login action called with user:', userData);
+      login: (user: User, token: string) => {
+        console.log('🔐 login action called with user:', user);
         
         if (typeof window !== 'undefined') {
-          localStorage.setItem('token', token);
+          localStorage.setItem('auth_token', token);
         }
         
         set({ 
-          user: userData, 
+          user, 
           token,
           isAuthenticated: true,
           isLoading: false 
@@ -89,7 +85,7 @@ export const useAuthStore = create<AuthState>()(
         console.log('🚪 logout action called');
         
         if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
+          localStorage.removeItem('auth_token');
         }
         
         set({ 
@@ -100,36 +96,13 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      testAuth: async (): Promise<void> => {
-        console.log('🛜 testAuth called');
-        try {
-          const response = await apiClient.post('/auth/test');
-          const { token, user } = response.data;
-          console.log('✅ testAuth success', token, user);
-          
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('token', token);
-          }
-          
-          set({
-            token,
-            user,
-            isAuthenticated: true,
-            isLoading: false
-          });
-        } catch (error) {
-          console.error('❌ testAuth failed:', error);
-          throw error;
-        }
-      },
-
       setToken: (token: string | null) => {
         console.log('🔑 setToken called with:', token);
         
         if (token && typeof window !== 'undefined') {
-          localStorage.setItem('token', token);
+          localStorage.setItem('auth_token', token);
         } else if (typeof window !== 'undefined') {
-          localStorage.removeItem('token');
+          localStorage.removeItem('auth_token');
         }
         
         set({ token });
@@ -145,7 +118,6 @@ export const useAuthStore = create<AuthState>()(
       onRehydrateStorage: () => (state) => {
         console.log('💾 Storage rehydrated', state);
         if (state && typeof state === 'object') {
-          // Теперь безопасно использовать spread
           return { ...state, isLoading: false };
         }
         return state;
@@ -155,7 +127,6 @@ export const useAuthStore = create<AuthState>()(
         user: state.user
       }),
       merge: (persistedState, currentState) => {
-        // Проверяем, что persistedState является объектом
         if (persistedState && typeof persistedState === 'object') {
           return {
             ...currentState,
@@ -163,7 +134,6 @@ export const useAuthStore = create<AuthState>()(
             initializeAuth: currentState.initializeAuth,
             login: currentState.login,
             logout: currentState.logout,
-            testAuth: currentState.testAuth,
             setToken: currentState.setToken,
             setUser: currentState.setUser
           };

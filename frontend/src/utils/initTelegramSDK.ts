@@ -1,5 +1,5 @@
+// frontend/src/utils/initTelegramSDK.ts
 import { logger } from './logger';
-import { isTelegramEnv } from './env';
 
 console.log('🔄 Инициализация Telegram SDK...');
 
@@ -35,6 +35,36 @@ const createDevWebApp = () => {
 };
 
 let webApp: any = null;
+
+// Функция инициализации Telegram SDK
+export const initTelegramSDK = (): boolean => {
+  if (typeof window.Telegram === 'undefined') {
+    console.warn('⚠️ Telegram SDK not available');
+    logger.warn('Telegram SDK not available');
+    webApp = createDevWebApp();
+    return false;
+  }
+
+  try {
+    // Инициализируем SDK
+    window.Telegram.WebApp.ready();
+    console.log('✅ Telegram SDK initialized successfully');
+    logger.info('Telegram SDK initialized successfully');
+    
+    // Расширяем viewport после инициализации
+    window.Telegram.WebApp.expand();
+    console.log('✅ Viewport expanded');
+    logger.info('Viewport expanded');
+    
+    webApp = window.Telegram.WebApp;
+    return true;
+  } catch (error) {
+    console.error('❌ Telegram SDK initialization failed:', error);
+    logger.error('Telegram SDK initialization failed:', error);
+    webApp = createDevWebApp();
+    return false;
+  }
+};
 
 // Безопасный интерфейс для работы с WebApp
 export const safeWebApp = {
@@ -72,67 +102,7 @@ export const safeWebApp = {
   // Добавьте другие необходимые методы
 };
 
-// Асинхронная функция для инициализации
-export const initializeWebApp = async () => {
-  // Пытаемся использовать глобальный объект Telegram, если доступен
-  if (isTelegramEnv()) {
-    webApp = window.Telegram?.WebApp;
-    console.log('✅ Telegram WebApp found in global object');
-    logger.info('Telegram WebApp found in global object');
-    return;
-  }
-
-  try {
-    // Пытаемся инициализировать через SDK
-    const { init, viewport } = await import('@telegram-apps/sdk');
-    init();
-    // После инициализации получаем webApp из глобального объекта
-    webApp = window.Telegram?.WebApp;
-    console.log('✅ Telegram SDK initialized successfully');
-    logger.info('Telegram SDK initialized successfully');
-    
-    // Монтируем viewport и обновляем layout
-    console.log('🔄 Монтирование viewport...');
-    logger.info('Mounting viewport...');
-    
-    viewport.mount({ timeout: 5000 })
-      .then(() => {
-        console.log('✅ Viewport mounted successfully');
-        logger.info('Viewport mounted successfully');
-        updateLayoutForViewport({
-          width: window.innerWidth,
-          height: window.innerHeight,
-          isExpanded: true,
-        });
-      })
-      .catch((error) => {
-        console.warn('⚠️ Viewport mounting timeout or error:', error);
-        logger.warn('Viewport mounting timeout or error:', error);
-      });
-  } catch (error) {
-    console.error('❌ Failed to initialize Telegram SDK', error);
-    logger.error('Failed to initialize Telegram SDK', error);
-    // Создаем заглушку для разработки
-    webApp = createDevWebApp();
-  }
-};
-
-// Функция для обновления layout
-function updateLayoutForViewport(viewportInfo: { width: number; height: number; isExpanded: boolean }): void {
-  const { width, height, isExpanded } = viewportInfo;
-
-  document.documentElement.style.setProperty('--viewport-width', `${width}px`);
-  document.documentElement.style.setProperty('--viewport-height', `${height}px`);
-
-  if (isExpanded) {
-    document.body.classList.add('viewport-expanded');
-    console.log('✅ Viewport expanded');
-    logger.info('Viewport expanded');
-  } else {
-    document.body.classList.remove('viewport-expanded');
-    console.log('✅ Viewport collapsed');
-    logger.info('Viewport collapsed');
-  }
-}
+// Инициализируем SDK при импорте модуля
+initTelegramSDK();
 
 export default webApp;

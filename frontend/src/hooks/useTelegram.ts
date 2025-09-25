@@ -1,3 +1,4 @@
+// frontend/src/hooks/useTelegram.ts
 import { safeWebApp } from '@/utils/initTelegramSDK';
 
 interface TelegramUser {
@@ -11,34 +12,40 @@ interface TelegramUser {
 }
 
 const useTelegram = () => {
-  // Правильная логика определения нахождения в Telegram
-  const webApp = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined;
-  const isTMA = !!webApp;
-  
-  // Используем данные из safeWebApp
-  const user = safeWebApp.initDataUnsafe?.user as TelegramUser | undefined;
+  // Правильное определение Telegram окружения
+  const isTelegramEnv = typeof window.Telegram !== 'undefined' && 
+                       typeof window.Telegram.WebApp !== 'undefined' &&
+                       window.Telegram.WebApp.initData !== '';
 
-  // Добавляем логирование
-  console.log('📱 useTelegram hook. isTMA:', isTMA, 'webApp:', webApp);
-  
-  // Дополнительное логирование для отладки с временным решением через any
-  if (isTMA) {
-    console.log('✅ Приложение запущено внутри Telegram');
-    console.log('👤 Пользователь:', user);
-    // Временное решение для дебага с приведением к any
-    console.log('🔧 Версия WebApp:', (webApp as any)?.version);
-    console.log('📱 Платформа:', (webApp as any)?.platform);
-  } else {
-    console.log('🌐 Приложение запущено вне Telegram (браузер)');
-  }
+  // Функция для расширения viewport
+  const expandViewport = () => {
+    if (isTelegramEnv) {
+      try {
+        // Инициализируем SDK перед использованием
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+        console.log('✅ Viewport expanded successfully');
+      } catch (error) {
+        console.error('expandViewport failed:', error);
+      }
+    }
+  };
+
+  // Получаем данные только если находимся в Telegram
+  const initData = isTelegramEnv ? window.Telegram.WebApp.initData : null;
+  const userData = isTelegramEnv ? window.Telegram.WebApp.initDataUnsafe.user : null;
+
+  // Логирование для отладки
+  console.log('📱 useTelegram hook. isTelegramEnv:', isTelegramEnv);
+  console.log('👤 User data:', userData);
+  console.log('🔧 Init data:', initData);
 
   return {
-    webApp: safeWebApp,
-    user,
-    isTMA,
-    isInTelegram: isTMA,
-    // Вспомогательные методы
-    isDevelopment: process.env.NODE_ENV === 'development'
+    isTelegramEnv,
+    expandViewport,
+    initData,
+    userData: userData as TelegramUser | null,
+    webApp: isTelegramEnv ? window.Telegram.WebApp : null
   };
 };
 
