@@ -15,6 +15,38 @@ function App() {
   const { isTelegramEnv, initDataRaw } = useTelegram();
   const { initializeAuth, isAuthenticated, isLoading } = useAuthStore();
 
+  // 🔧 ДОБАВЛЕН: useEffect для инициализации Eruda
+  useEffect(() => {
+    // Проверяем параметр debug в URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const isDebugMode = urlParams.get('debug') === 'true';
+    
+    if (isDebugMode) {
+      console.log('🔧 Debug mode activated, initializing Eruda...');
+      
+      // Динамический импорт Eruda
+      import('eruda')
+        .then((erudaModule) => {
+          const eruda = erudaModule.default;
+          eruda.init();
+          console.log('✅ Eruda debug console initialized successfully');
+          
+          // Дополнительная диагностика Telegram WebApp
+          console.log('📱 Telegram WebApp check:', {
+            hasTelegram: typeof window.Telegram !== 'undefined',
+            hasWebApp: typeof window.Telegram?.WebApp !== 'undefined',
+            initData: window.Telegram?.WebApp?.initData,
+            initDataUnsafe: window.Telegram?.WebApp?.initDataUnsafe,
+            platform: window.Telegram?.WebApp?.platform,
+            version: window.Telegram?.WebApp?.version
+          });
+        })
+        .catch((error) => {
+          console.error('❌ Failed to initialize Eruda:', error);
+        });
+    }
+  }, []); // Пустой массив зависимостей - выполняется один раз при монтировании
+
   useEffect(() => {
     // Безопасный доступ к свойствам Telegram WebApp с опциональной цепочкой
     const webApp = window.Telegram?.WebApp;
