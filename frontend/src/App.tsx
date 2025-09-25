@@ -12,7 +12,7 @@ import DebugPanel from './components/DebugPanel';
 
 function App() {
   const [isInitialized, setIsInitialized] = useState(false);
-  const { isTelegramEnv, initDataRaw } = useTelegram();
+  const { isTelegramEnv, isSDKReady, initData } = useTelegram(); // Добавлен isSDKReady
   const { initializeAuth, isAuthenticated, isLoading } = useAuthStore();
 
   // 🔧 ДОБАВЛЕН: useEffect для инициализации Eruda
@@ -45,7 +45,7 @@ function App() {
           console.error('❌ Failed to initialize Eruda:', error);
         });
     }
-  }, []); // Пустой массив зависимостей - выполняется один раз при монтировании
+  }, []);
 
   useEffect(() => {
     // Безопасный доступ к свойствам Telegram WebApp с опциональной цепочкой
@@ -86,11 +86,15 @@ function App() {
     }
   }, []);
 
+  // 🔄 ОБНОВЛЕН: useEffect для инициализации приложения с ожиданием SDK
   useEffect(() => {
-    console.log('🔍 App mounted. isTelegramEnv:', isTelegramEnv);
-    console.log('📱 InitDataRaw available:', !!initDataRaw);
-
     const initializeApp = async () => {
+      // Ждем загрузки SDK Telegram, но не более 3 секунд
+      if (!isSDKReady) {
+        console.log('⏳ Waiting for Telegram SDK...');
+        return;
+      }
+
       try {
         // Безопасная инициализация Telegram WebApp
         const webApp = window.Telegram?.WebApp;
@@ -103,9 +107,9 @@ function App() {
           }
         }
 
-        if (isTelegramEnv && initDataRaw) {
-          console.log('🔐 Using Telegram authentication with initDataRaw');
-          await initializeAuth(initDataRaw);
+        if (isTelegramEnv && initData) {
+          console.log('🔐 Using Telegram authentication');
+          await initializeAuth(initData);
         } else {
           console.log('🧪 Using test authentication');
           await initializeAuth(null);
@@ -119,7 +123,7 @@ function App() {
     };
 
     initializeApp();
-  }, [isTelegramEnv, initDataRaw, initializeAuth]);
+  }, [isSDKReady, isTelegramEnv, initData, initializeAuth]);
 
   if (!isInitialized || isLoading) {
     console.log('⏳ Showing loading state');

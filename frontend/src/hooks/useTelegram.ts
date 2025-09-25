@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 
 interface TelegramUser {
   id: number;
@@ -17,12 +17,70 @@ interface InitDataUnsafe {
   hash?: string;
 }
 
+// Функция для ожидания загрузки Telegram SDK
+const waitForTelegramSDK = (timeout = 3000): Promise<boolean> => {
+  return new Promise((resolve) => {
+    if (typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp) {
+      console.log('✅ Telegram SDK already loaded');
+      return resolve(true);
+    }
+
+    console.log('⏳ Waiting for Telegram SDK to load...');
+
+    const checkInterval = setInterval(() => {
+      if (typeof window !== 'undefined' && window.Telegram && window.Telegram.WebApp) {
+        clearInterval(checkInterval);
+        console.log('✅ Telegram SDK loaded successfully');
+        resolve(true);
+      }
+    }, 100);
+
+    setTimeout(() => {
+      clearInterval(checkInterval);
+      console.warn('⚠️ Telegram SDK loading timeout');
+      resolve(false);
+    }, timeout);
+  });
+};
+
 export const useTelegram = () => {
+  const [isSDKReady, setIsSDKReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const initSDK = async () => {
+      setIsLoading(true);
+      try {
+        const ready = await waitForTelegramSDK();
+        if (mounted) {
+          setIsSDKReady(ready);
+        }
+      } catch (error) {
+        console.error('Error loading Telegram SDK:', error);
+        if (mounted) {
+          setIsSDKReady(false);
+        }
+      } finally {
+        if (mounted) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    initSDK();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const isTelegramEnv = useMemo(() => {
-    return typeof window !== 'undefined' && 
+    return isSDKReady && 
            typeof window.Telegram !== 'undefined' && 
            typeof window.Telegram.WebApp !== 'undefined';
-  }, []);
+  }, [isSDKReady]);
 
   const expandViewport = () => {
     if (isTelegramEnv && window.Telegram?.WebApp) {
@@ -37,7 +95,7 @@ export const useTelegram = () => {
   };
 
   // Получаем raw строку initData для аутентификации
-  const initDataRaw = isTelegramEnv ? window.Telegram?.WebApp?.initData || '' : '';
+  const initData = isTelegramEnv ? window.Telegram?.WebApp?.initData || '' : '';
 
   // Получаем разобранный объект для UI
   const initDataUnsafe = isTelegramEnv ? 
@@ -48,17 +106,29 @@ export const useTelegram = () => {
   const webApp = isTelegramEnv ? window.Telegram?.WebApp || null : null;
 
   // Логирование для отладки
-  console.log('📱 useTelegram hook. isTelegramEnv:', isTelegramEnv);
-  console.log('🔐 InitDataRaw (для аутентификации):', initDataRaw ? `present (${initDataRaw.length} chars)` : 'empty');
-  console.log('👤 User data:', userData);
-  console.log('🌐 WebApp:', webApp);
+  console.log('📱 useTelegram hook:', {
+    isLoading,
+    isSDKReady,
+    isTelegramEnv,
+    initDataLength: initData?.length || 0,
+    hasUserData: !!userData
+  });
 
   return {
+    // Состояние загрузки
+    isLoading,
+    isSDKReady,
+    
+    // Основные свойства
     isTelegramEnv,
     expandViewport,
-    initDataRaw,    // строка для auth/init на бэкенде
-    initDataUnsafe, // объект для компонентов UI
+    
+    // Данные инициализации
+    initData,        // строка для auth/init на бэкенде
+    initDataUnsafe,  // объект для компонентов UI
     userData,
+    
+    // WebApp экземпляр
     webApp
   };
 };
