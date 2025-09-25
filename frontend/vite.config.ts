@@ -12,6 +12,7 @@ export default defineConfig({
   build: {
     target: 'es2020',
     rollupOptions: {
+      input: './index.html', // Явно указываем исходный HTML-файл
       output: {
         chunkFileNames: 'assets/[name]-[hash].js',
         entryFileNames: 'assets/[name]-[hash].js',
@@ -28,5 +29,6 @@ export default defineConfig({
         drop_console: false, // Не удалять console.log
       }
     }
-  }
+  },
+  publicDir: 'public', // Указываем папку с публичными ресурсами
 });
