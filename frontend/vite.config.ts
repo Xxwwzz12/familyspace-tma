@@ -10,7 +10,7 @@ export default defineConfig({
     },
   },
   build: {
-    target: 'es2020', // Поддержка современных возможностей JavaScript
+    target: 'es2020',
     rollupOptions: {
       output: {
         chunkFileNames: 'assets/[name]-[hash].js',
@@ -24,6 +24,9 @@ export default defineConfig({
       format: {
         comments: false,
       },
-    },
-  },
+      compress: {
+        drop_console: false, // Не удалять console.log
+      }
+    }
+  }
 });
