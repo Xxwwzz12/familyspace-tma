@@ -14,34 +14,39 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  initializeAuth: (initData: string | null) => Promise<void>;
+  initializeAuth: (initDataRaw: string | null) => Promise<void>;
   login: (user: User, token: string) => void;
   logout: () => void;
+  testAuth: () => Promise<void>;
   setToken: (token: string | null) => void;
   setUser: (user: User | null) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       token: null,
       user: null,
       isAuthenticated: false,
       isLoading: true,
 
-      initializeAuth: async (initData: string | null) => {
-        console.log('🔄 initializeAuth called with initData:', initData);
+      /**
+       * Инициализирует аутентификацию пользователя
+       * @param initDataRaw - Сырые данные инициализации Telegram Web App или null для тестовой аутентификации
+       */
+      initializeAuth: async (initDataRaw: string | null) => {
+        console.log('🔄 initializeAuth called with initDataRaw:', initDataRaw);
         
         try {
           let response;
           
-          if (initData) {
-            // Настоящая Telegram аутентификация
-            console.log('🔐 Authenticating with Telegram initData');
-            response = await apiClient.post('/auth/init', { initData });
+          if (initDataRaw) {
+            // Настоящая Telegram аутентификация с использованием сырых данных
+            console.log('🔐 Authenticating with Telegram initDataRaw');
+            response = await apiClient.post('/auth/init', { initData: initDataRaw });
           } else {
             // Тестовая аутентификация (fallback)
-            console.log('🧪 Using test authentication');
+            console.log('🧪 Using test authentication (initDataRaw is null)');
             response = await apiClient.post('/auth/test');
           }
           
@@ -66,6 +71,40 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
+      /**
+       * Выполняет тестовую аутентификацию (без использования Telegram данных)
+       */
+      testAuth: async () => {
+        console.log('🛜 testAuth called');
+        try {
+          const response = await apiClient.post('/auth/test');
+          const { user, token } = response.data;
+          
+          // Сохраняем токен
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('auth_token', token);
+          }
+          
+          set({ 
+            user, 
+            token,
+            isAuthenticated: true, 
+            isLoading: false 
+          });
+          
+          console.log('✅ Test authentication successful:', user);
+        } catch (error) {
+          console.error('❌ Test authentication failed:', error);
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      /**
+       * Вход пользователя в систему
+       * @param user - Данные пользователя
+       * @param token - JWT токен аутентификации
+       */
       login: (user: User, token: string) => {
         console.log('🔐 login action called with user:', user);
         
@@ -81,6 +120,9 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
+      /**
+       * Выход пользователя из системы
+       */
       logout: () => {
         console.log('🚪 logout action called');
         
@@ -96,6 +138,10 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
+      /**
+       * Устанавливает токен аутентификации
+       * @param token - JWT токен или null для очистки
+       */
       setToken: (token: string | null) => {
         console.log('🔑 setToken called with:', token);
         
@@ -108,6 +154,10 @@ export const useAuthStore = create<AuthState>()(
         set({ token });
       },
 
+      /**
+       * Устанавливает данные пользователя
+       * @param user - Данные пользователя или null для очистки
+       */
       setUser: (user: User | null) => {
         console.log('👤 setUser called with:', user);
         set({ user });
@@ -134,6 +184,7 @@ export const useAuthStore = create<AuthState>()(
             initializeAuth: currentState.initializeAuth,
             login: currentState.login,
             logout: currentState.logout,
+            testAuth: currentState.testAuth,
             setToken: currentState.setToken,
             setUser: currentState.setUser
           };

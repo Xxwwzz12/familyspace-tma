@@ -30,43 +30,41 @@ const createDevWebApp = () => {
       console.log('🔄 WebApp closed');
       logger.info('WebApp closed');
     },
-    // Добавляем другие методы по мере необходимости
+    // Добавляем только существующие методы
   };
 };
 
-let webApp: any = null;
+// Получаем webApp из глобального объекта или создаем заглушку
+const webApp = typeof window !== 'undefined' && window.Telegram?.WebApp 
+  ? window.Telegram.WebApp 
+  : createDevWebApp();
 
 // Функция инициализации Telegram SDK
 export const initTelegramSDK = (): boolean => {
-  if (typeof window.Telegram === 'undefined') {
+  if (typeof window === 'undefined' || typeof window.Telegram === 'undefined') {
     console.warn('⚠️ Telegram SDK not available');
     logger.warn('Telegram SDK not available');
-    webApp = createDevWebApp();
     return false;
   }
 
   try {
-    // Инициализируем SDK
-    window.Telegram.WebApp.ready();
+    window.Telegram.WebApp?.ready();
     console.log('✅ Telegram SDK initialized successfully');
     logger.info('Telegram SDK initialized successfully');
     
-    // Расширяем viewport после инициализации
-    window.Telegram.WebApp.expand();
+    window.Telegram.WebApp?.expand();
     console.log('✅ Viewport expanded');
     logger.info('Viewport expanded');
     
-    webApp = window.Telegram.WebApp;
     return true;
   } catch (error) {
     console.error('❌ Telegram SDK initialization failed:', error);
     logger.error('Telegram SDK initialization failed:', error);
-    webApp = createDevWebApp();
     return false;
   }
 };
 
-// Безопасный интерфейс для работы с WebApp
+// Безопасный интерфейс для работы с WebApp (только существующие методы)
 export const safeWebApp = {
   ready: () => {
     console.log('🔄 Вызов webApp.ready()');
@@ -84,25 +82,12 @@ export const safeWebApp = {
     logger.info('Calling webApp.close()');
     return webApp?.close?.();
   },
-  showPopup: (params: any) => {
-    console.log('🔄 Вызов webApp.showPopup()', params);
-    logger.info('Calling webApp.showPopup()', params);
-    return webApp?.showPopup?.(params);
-  },
-  showAlert: (message: string) => {
-    console.log('🔄 Вызов webApp.showAlert()', message);
-    logger.info('Calling webApp.showAlert()', message);
-    return webApp?.showAlert?.(message);
-  },
-  showConfirm: (message: string) => {
-    console.log('🔄 Вызов webApp.showConfirm()', message);
-    logger.info('Calling webApp.showConfirm()', message);
-    return webApp?.showConfirm?.(message);
-  },
-  // Добавьте другие необходимые методы
+  // Удалены несуществующие методы: showPopup, showAlert, showConfirm
 };
 
-// Инициализируем SDK при импорте модуля
-initTelegramSDK();
+// Инициализируем SDK при импорте модуля (только в браузере)
+if (typeof window !== 'undefined') {
+  initTelegramSDK();
+}
 
 export default webApp;

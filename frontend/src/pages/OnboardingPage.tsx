@@ -17,7 +17,7 @@ const OnboardingPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
   const { authWithTelegram } = useApi();
-  const { login, isAuthenticated, testAuth } = useAuthStore(); // Заменили setAuth на login
+  const { login, isAuthenticated, testAuth } = useAuthStore();
 
   // Проверка аутентификации и перенаправление
   useEffect(() => {
@@ -35,7 +35,7 @@ const OnboardingPage: React.FC = () => {
       const initData = await telegramService.initTelegramAuth();
       const response = await authWithTelegram(initData);
       const { user, token } = response;
-      login(user, token); // Заменили setAuth на login
+      login(user, token);
     } catch (err: any) {
       console.error(err);
       hapticFeedback.impactOccurred('heavy');
@@ -43,35 +43,30 @@ const OnboardingPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [authWithTelegram, login]); // Обновили зависимости
+  }, [authWithTelegram, login]);
 
-  // Обработчик fallback-входа (имитация)
-  const handleFallbackLogin = useCallback(async () => {
+  // Обработчик тестовой аутентификации
+  const handleTestAuth = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      // Вызов testAuth из хранилища
       await testAuth();
-      
-      // После успешной тестовой аутентизации создаем тестового пользователя
+      // После успешной тестовой аутентификации создаем тестового пользователя
       const testUser = {
         id: 'test-user-id',
         firstName: 'Test',
         lastName: 'User',
         username: 'testuser'
       };
-      
       const testToken = 'test-token-' + Date.now();
-      
-      // Сохраняем тестовые данные в хранилище с помощью login
-      login(testUser, testToken); // Заменили setAuth на login
+      login(testUser, testToken);
     } catch (err: any) {
       console.error(err);
-      setError(err?.message ?? 'Ошибка имитации входа');
+      setError(err?.message ?? 'Ошибка тестовой аутентификации');
     } finally {
       setLoading(false);
     }
-  }, [testAuth, login]); // Обновили зависимости
+  }, [testAuth, login]);
 
   // Определяем режим работы (TMA или fallback)
   const isTmaMode = isTMAavailable();
@@ -99,7 +94,7 @@ const OnboardingPage: React.FC = () => {
     }
 
     // Подписка на клик в зависимости от режима
-    const handler = isTmaMode ? handleTelegramLogin : handleFallbackLogin;
+    const handler = isTmaMode ? handleTelegramLogin : handleTestAuth;
     if (onMainButtonClick.isAvailable?.()) {
       offClick = onMainButtonClick(handler);
     }
@@ -113,7 +108,7 @@ const OnboardingPage: React.FC = () => {
         console.warn('Cleanup failed', e);
       }
     };
-  }, [isTmaMode, handleTelegramLogin, handleFallbackLogin]);
+  }, [isTmaMode, handleTelegramLogin, handleTestAuth]);
 
   // Обновление состояния кнопки
   useEffect(() => {
@@ -139,11 +134,11 @@ const OnboardingPage: React.FC = () => {
       {/* Fallback-кнопка для нетематического окружения */}
       {!isTmaMode && (
         <button 
-          onClick={handleFallbackLogin} 
+          onClick={handleTestAuth} 
           disabled={loading}
           className="fallback-login-btn"
         >
-          {loading ? 'Загрузка...' : 'Тестовый вход'}
+          {loading ? 'Загрузка...' : 'Test Auth'}
         </button>
       )}
       

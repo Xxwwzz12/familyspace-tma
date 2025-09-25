@@ -1,5 +1,4 @@
-// frontend/src/hooks/useTelegram.ts
-import { safeWebApp } from '@/utils/initTelegramSDK';
+import { useMemo } from 'react';
 
 interface TelegramUser {
   id: number;
@@ -11,17 +10,23 @@ interface TelegramUser {
   allows_write_to_pm?: boolean;
 }
 
-const useTelegram = () => {
-  // Правильное определение Telegram окружения
-  const isTelegramEnv = typeof window.Telegram !== 'undefined' && 
-                       typeof window.Telegram.WebApp !== 'undefined' &&
-                       window.Telegram.WebApp.initData !== '';
+interface InitDataUnsafe {
+  user?: TelegramUser;
+  query_id?: string;
+  auth_date?: number;
+  hash?: string;
+}
 
-  // Функция для расширения viewport
+export const useTelegram = () => {
+  const isTelegramEnv = useMemo(() => {
+    return typeof window !== 'undefined' && 
+           typeof window.Telegram !== 'undefined' && 
+           typeof window.Telegram.WebApp !== 'undefined';
+  }, []);
+
   const expandViewport = () => {
-    if (isTelegramEnv) {
+    if (isTelegramEnv && window.Telegram?.WebApp) {
       try {
-        // Инициализируем SDK перед использованием
         window.Telegram.WebApp.ready();
         window.Telegram.WebApp.expand();
         console.log('✅ Viewport expanded successfully');
@@ -31,21 +36,30 @@ const useTelegram = () => {
     }
   };
 
-  // Получаем данные только если находимся в Telegram
-  const initData = isTelegramEnv ? window.Telegram.WebApp.initData : null;
-  const userData = isTelegramEnv ? window.Telegram.WebApp.initDataUnsafe.user : null;
+  // Получаем raw строку initData для аутентификации
+  const initDataRaw = isTelegramEnv ? window.Telegram?.WebApp?.initData || '' : '';
+
+  // Получаем разобранный объект для UI
+  const initDataUnsafe = isTelegramEnv ? 
+    (window.Telegram?.WebApp?.initDataUnsafe as InitDataUnsafe | undefined) : 
+    undefined;
+
+  const userData = initDataUnsafe?.user || null;
+  const webApp = isTelegramEnv ? window.Telegram?.WebApp || null : null;
 
   // Логирование для отладки
   console.log('📱 useTelegram hook. isTelegramEnv:', isTelegramEnv);
+  console.log('🔐 InitDataRaw (для аутентификации):', initDataRaw ? `present (${initDataRaw.length} chars)` : 'empty');
   console.log('👤 User data:', userData);
-  console.log('🔧 Init data:', initData);
+  console.log('🌐 WebApp:', webApp);
 
   return {
     isTelegramEnv,
     expandViewport,
-    initData,
-    userData: userData as TelegramUser | null,
-    webApp: isTelegramEnv ? window.Telegram.WebApp : null
+    initDataRaw,    // строка для auth/init на бэкенде
+    initDataUnsafe, // объект для компонентов UI
+    userData,
+    webApp
   };
 };
 
