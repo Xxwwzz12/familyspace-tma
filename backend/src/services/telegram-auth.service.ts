@@ -19,6 +19,63 @@ const FALLBACK_USER: TelegramUser = {
   allows_write_to_pm: true
 };
 
+// Функция для безопасной проверки переменных окружения
+function validateEnvironmentVariables(debug: boolean = false): string {
+  // Проверяем наличие BOT_TOKEN
+  if (!process.env.BOT_TOKEN) {
+    console.error('❌ BOT_TOKEN is not set in environment variables');
+    
+    // Логируем доступные переменные окружения (без значений для безопасности)
+    const envKeys = Object.keys(process.env).sort();
+    console.log('📋 Available environment variables:', envKeys.join(', '));
+    
+    // Проверяем похожие переменные
+    const similarVars = envKeys.filter(key => 
+      key.includes('BOT') || key.includes('TOKEN') || key.includes('TELEGRAM')
+    );
+    
+    if (similarVars.length > 0) {
+      console.log('🔍 Similar environment variables found:', similarVars.join(', '));
+    }
+    
+    throw new Error('BOT_TOKEN is not set in environment variables');
+  }
+  
+  const BOT_TOKEN = process.env.BOT_TOKEN.trim();
+  
+  // Проверяем, что токен не пустой после trim()
+  if (!BOT_TOKEN) {
+    console.error('❌ BOT_TOKEN is set but empty or contains only whitespace');
+    throw new Error('BOT_TOKEN is empty or contains only whitespace');
+  }
+  
+  // Проверяем базовый формат токена (должен быть в формате "число:секрет")
+  if (!BOT_TOKEN.match(/^\d+:[a-zA-Z0-9_-]+$/)) {
+    console.error('❌ Invalid BOT_TOKEN format');
+    
+    // Маскируем токен для безопасного логирования (показываем только первые 10 символов)
+    const maskedToken = BOT_TOKEN.length > 10 
+      ? BOT_TOKEN.substring(0, 10) + '...' 
+      : BOT_TOKEN;
+    
+    console.log('🔒 BOT_TOKEN (masked):', maskedToken);
+    console.log('📝 Expected format: "number:secret" (e.g., "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz")');
+    
+    throw new Error('Invalid BOT_TOKEN format. Expected format: "number:secret"');
+  }
+  
+  if (debug) {
+    // В debug режиме показываем маскированную версию токена
+    const maskedToken = BOT_TOKEN.substring(0, 5) + '...' + BOT_TOKEN.substring(BOT_TOKEN.length - 5);
+    console.log('✅ BOT_TOKEN is available and valid (masked):', maskedToken);
+    console.log('✅ BOT_TOKEN length:', BOT_TOKEN.length);
+  } else {
+    console.log('✅ BOT_TOKEN is available and valid');
+  }
+  
+  return BOT_TOKEN;
+}
+
 export async function validateInitData(
   initData: string, 
   options: ValidationOptions = {}
@@ -27,6 +84,7 @@ export async function validateInitData(
   
   if (debug) {
     console.log('[TelegramAuth] InitData received:', initData);
+    console.log('[TelegramAuth] Validation options:', { disableTimeCheck, debug });
   }
 
   // Проверка на fallback-режим разработки
@@ -64,16 +122,8 @@ export async function validateInitData(
     return FALLBACK_USER;
   }
 
-  // Остальная часть функции для настоящей проверки
-  const BOT_TOKEN = process.env.BOT_TOKEN?.trim();
-  if (!BOT_TOKEN) {
-    throw new Error('BOT_TOKEN is not set in environment variables');
-  }
-
-  // Проверяем формат BOT_TOKEN (должен быть в формате "число:секрет")
-  if (!BOT_TOKEN.match(/^\d+:[a-zA-Z0-9_-]+$/)) {
-    throw new Error('Invalid BOT_TOKEN format. Expected format: "number:secret"');
-  }
+  // Проверяем переменные окружения с улучшенной диагностикой
+  const BOT_TOKEN = validateEnvironmentVariables(debug);
 
   // Разбиваем строку на параметры. НЕ декодируем значения!
   const searchParams = new URLSearchParams(initData);
@@ -172,3 +222,6 @@ export async function validateInitData(
     throw new Error(`Invalid user data: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
+
+// Экспортируем функцию для тестирования
+export { validateEnvironmentVariables };

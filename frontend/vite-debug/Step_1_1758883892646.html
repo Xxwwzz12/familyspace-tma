@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>FamilySpace TMA</title>
+
+    <!-- Подключение официального скрипта Telegram Web App -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+	<script type="module" src="./src/main.tsx"></script>
+
+
+    <!-- Vite will inject built CSS/JS here -->
+    <!-- VITE_INJECT -->
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <!-- Скрипт активации Eruda (оставляем для отладки) -->
+    <script>
+      (function() {
+        if (window.location.search.includes('debug=true')) {
+          var script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/eruda';
+          document.body.appendChild(script);
+          script.onload = function() {
+            if (typeof eruda !== 'undefined') {
+              eruda.init();
+              console.log('🔧 Eruda debug console activated');
+            }
+          };
+        }
+      })();
+    </script>
+
+    <!-- NOTE:
+         Не оставляю здесь прямой импорт /src/App.tsx, т.к. плагин автоматически
+         вставит ссылки на сгенерированные (хешированные) бандлы в место плейсхолдера.
+    -->
+  </body>
+</html>

@@ -7,19 +7,33 @@ import { generateToken } from '../services/jwt.service';
 // Основной эндпоинт аутентификации
 export const authInit = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('Received initData:', req.body.initData);
-    
     const { initData } = req.body;
-
+    
+    console.log('🔐 Auth init started with initData length:', initData?.length);
+    
+    // Проверяем наличие initData
     if (!initData) {
-      res.status(400).json({ error: 'initData is required' });
-      return;
+      console.log('❌ Missing initData in request');
+      return res.status(400).json({ error: 'initData is required' });
     }
-
+    
+    // Валидация данных от Telegram
+    console.log('🔄 Validating initData...');
     const telegramUser = await validateInitData(initData, { debug: true });
+    console.log('✅ InitData validation successful');
+    
+    // Создание/получение пользователя
+    console.log('🔄 Finding or creating user...');
     const user = await findOrCreateUser(telegramUser);
+    console.log('✅ User processing successful, user ID:', user.id);
+    
+    // Генерация JWT токена
+    console.log('🔄 Generating JWT token...');
     const token = generateToken(user.id);
-
+    console.log('✅ Token generation successful');
+    
+    console.log('✅ Auth init successful for user:', user.id);
+    
     res.json({
       token,
       user: {
@@ -30,20 +44,34 @@ export const authInit = async (req: Request, res: Response): Promise<void> => {
         telegramId: user.telegramId.toString(),
       },
     });
-  } catch (error) {
-    console.error('Auth init error:', error);
     
-    // Обработка ошибки с проверкой типа
-    let errorMessage = 'Internal server error';
+  } catch (error) {
+    console.error('❌ Auth init error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      timestamp: new Date().toISOString(),
+      initDataLength: req.body.initData?.length || 0
+    });
+    
+    let errorMessage = 'Authentication failed';
     let statusCode = 500;
     
     if (error instanceof Error) {
-      errorMessage = error.message;
-      statusCode = error.message.includes('validation') ? 400 : 500;
+      // Определяем тип ошибки для соответствующего статуса
+      if (error.message.includes('validation') || error.message.includes('Invalid')) {
+        statusCode = 401;
+        errorMessage = 'Invalid initData';
+      } else if (error.message.includes('required') || error.message.includes('missing')) {
+        statusCode = 400;
+        errorMessage = error.message;
+      }
     }
     
     res.status(statusCode).json({ 
-      error: errorMessage
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' && error instanceof Error 
+        ? error.message 
+        : undefined
     });
   }
 };
@@ -51,6 +79,8 @@ export const authInit = async (req: Request, res: Response): Promise<void> => {
 // Эндпоинт для тестирования
 export const testAuth = async (req: Request, res: Response): Promise<void> => {
   try {
+    console.log('🧪 Test auth endpoint called');
+    
     // Генерируем случайный telegramId для каждого запроса
     const randomTelegramId = Math.floor(Math.random() * 1000000000);
     
@@ -65,8 +95,11 @@ export const testAuth = async (req: Request, res: Response): Promise<void> => {
       allows_write_to_pm: true
     };
 
+    console.log('🔄 Creating test user...');
     const user = await findOrCreateUser(telegramUser);
     const token = generateToken(user.id);
+    
+    console.log('✅ Test auth successful for user:', user.id);
 
     res.json({
       token,
@@ -79,15 +112,17 @@ export const testAuth = async (req: Request, res: Response): Promise<void> => {
       }
     });
   } catch (error) {
-    console.error('Error in testAuth:', error);
+    console.error('❌ Test auth error details:', {
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : 'No stack trace',
+      timestamp: new Date().toISOString()
+    });
     
-    // Обработка ошибки с проверкой типа
-    let errorMessage = 'Internal server error';
-    
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
-    
-    res.status(500).json({ error: errorMessage });
+    res.status(500).json({ 
+      error: 'Test authentication failed',
+      details: process.env.NODE_ENV === 'development' && error instanceof Error 
+        ? error.message 
+        : undefined
+    });
   }
 };
