@@ -14,7 +14,7 @@ function htmlDebugPlugin(): Plugin {
 
     config(config) {
       console.log('🔧 [HTML Debug] Config loaded:', {
-        root: config.root,
+        root: path.resolve(__dirname),
         build: config.build,
         pluginNames: (config.plugins ?? [])
           .map((p: any) => {
