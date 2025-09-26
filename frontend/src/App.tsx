@@ -12,7 +12,7 @@ import DebugPanel from './components/DebugPanel';
 
 function App() {
   const [isInitialized, setIsInitialized] = useState(false);
-  const { isTelegramEnv, isSDKReady, initData } = useTelegram(); // Добавлен isSDKReady
+  const { isTelegramEnv, isSDKReady, initData } = useTelegram();
   const { initializeAuth, isAuthenticated, isLoading } = useAuthStore();
 
   // 🔧 ДОБАВЛЕН: useEffect для инициализации Eruda
@@ -86,16 +86,25 @@ function App() {
     }
   }, []);
 
-  // 🔄 ОБНОВЛЕН: useEffect для инициализации приложения с ожиданием SDK
+  // 🔄 ОБНОВЛЕН: useEffect для инициализации приложения с улучшенной диагностикой
   useEffect(() => {
     const initializeApp = async () => {
-      // Ждем загрузки SDK Telegram, но не более 3 секунд
+      // Ждем загрузки SDK Telegram
       if (!isSDKReady) {
         console.log('⏳ Waiting for Telegram SDK...');
         return;
       }
 
       try {
+        console.log('🏗️ App initialization started');
+        console.log('📱 Telegram env check:', {
+          hasTelegram: typeof window.Telegram !== 'undefined',
+          hasWebApp: typeof window.Telegram?.WebApp !== 'undefined',
+          hasInitData: !!window.Telegram?.WebApp?.initData,
+          isTelegramEnv: isTelegramEnv,
+          isSDKReady: isSDKReady
+        });
+        
         // Безопасная инициализация Telegram WebApp
         const webApp = window.Telegram?.WebApp;
         if (webApp) {
@@ -108,25 +117,39 @@ function App() {
         }
 
         if (isTelegramEnv && initData) {
-          console.log('🔐 Using Telegram authentication');
+          console.log('🔐 Starting Telegram authentication');
+          console.log('📋 InitData content:', {
+            length: initData?.length || 0,
+            first100Chars: initData?.substring(0, 100) + '...'
+          });
+          
           await initializeAuth(initData);
+          console.log('✅ Telegram authentication completed');
         } else {
-          console.log('🧪 Using test authentication');
+          console.log('🧪 Falling back to test authentication');
           await initializeAuth(null);
+          console.log('✅ Test authentication completed');
         }
+        
         setIsInitialized(true);
-        console.log('🎉 App initialization completed');
+        console.log('🎉 App initialization completed successfully');
+        console.log('🔐 Final auth status:', { isAuthenticated, isLoading });
       } catch (error) {
         console.error('❌ App initialization failed:', error);
+        console.error('💥 Error details:', {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        });
         setIsInitialized(true);
       }
     };
 
     initializeApp();
-  }, [isSDKReady, isTelegramEnv, initData, initializeAuth]);
+  }, [isSDKReady, isTelegramEnv, initData, initializeAuth, isAuthenticated, isLoading]);
 
   if (!isInitialized || isLoading) {
-    console.log('⏳ Showing loading state');
+    console.log('⏳ Showing loading state', { isInitialized, isLoading });
     return (
       <div style={{ 
         display: 'flex', 
@@ -140,7 +163,11 @@ function App() {
     );
   }
 
-  console.log('🎯 Rendering main content. User authenticated:', isAuthenticated);
+  console.log('🎯 Rendering main content', { 
+    isAuthenticated, 
+    isInitialized, 
+    isLoading 
+  });
 
   return (
     <ErrorBoundary>

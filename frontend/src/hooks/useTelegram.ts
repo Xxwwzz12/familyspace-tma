@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 
 interface TelegramUser {
   id: number;
@@ -105,6 +105,34 @@ export const useTelegram = () => {
   const userData = initDataUnsafe?.user || null;
   const webApp = isTelegramEnv ? window.Telegram?.WebApp || null : null;
 
+  // Функция для получения initData для аутентификации с логированием
+  const getInitDataForAuth = useCallback(() => {
+    if (!isTelegramEnv) {
+      console.log('🔍 Not in Telegram environment, returning empty initData');
+      return '';
+    }
+
+    const rawInitData = window.Telegram?.WebApp?.initData || '';
+    
+    // Детальное логирование передаваемых данных
+    console.log('🔍 Raw initData for auth:', rawInitData);
+    console.log('📏 InitData length:', rawInitData.length);
+    console.log('🔢 InitData character count:', rawInitData.split('').length);
+    console.log('📋 InitData segments:', rawInitData.split('&').length);
+    
+    // Проверяем, что данные не модифицированы
+    if (rawInitData) {
+      const hashIndex = rawInitData.indexOf('hash=');
+      if (hashIndex !== -1) {
+        console.log('✅ Hash found in initData at position:', hashIndex);
+      } else {
+        console.warn('⚠️ Hash not found in initData');
+      }
+    }
+    
+    return rawInitData;
+  }, [isTelegramEnv]);
+
   // Логирование для отладки
   console.log('📱 useTelegram hook:', {
     isLoading,
@@ -129,7 +157,10 @@ export const useTelegram = () => {
     userData,
     
     // WebApp экземпляр
-    webApp
+    webApp,
+    
+    // Функция для получения initData с логированием
+    getInitDataForAuth
   };
 };
 

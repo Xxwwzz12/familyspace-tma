@@ -67,21 +67,73 @@ function validateEnvironmentVariables(debug: boolean = false): string {
   return BOT_TOKEN;
 }
 
-// Функция для ручного парсинга initData без автоматического декодирования
-function parseInitDataManually(initData: string): URLSearchParams {
-  const params = new URLSearchParams();
-  const pairs = initData.split('&');
+// Функция для извлечения и обработки параметров согласно требованиям Telegram
+function extractAndPrepareParams(initData: string, debug: boolean = false): { params: Record<string, string>, hash: string } {
+  const params: Record<string, string> = {};
+  const urlParams = new URLSearchParams(initData);
   
-  for (const pair of pairs) {
-    const [key, ...valueParts] = pair.split('=');
-    const value = valueParts.join('='); // На случай, если значение содержит '='
+  // Извлекаем хэш отдельно
+  const hash = urlParams.get('hash');
+  if (!hash) {
+    throw new Error('Missing hash parameter in initData');
+  }
+  
+  // Обрабатываем только разрешенные параметры
+  const allowedKeys = ['auth_date', 'query_id', 'user'];
+  
+  for (const [key, value] of urlParams.entries()) {
+    if (key === 'hash') continue; // hash уже извлекли
     
-    if (key && value !== undefined) {
-      params.append(key, value);
+    if (allowedKeys.includes(key)) {
+      // Декодируем значения параметров
+      try {
+        params[key] = decodeURIComponent(value);
+      } catch (error) {
+        if (debug) {
+          console.warn(`[TelegramAuth] Failed to decode parameter ${key}, using original value`);
+        }
+        params[key] = value;
+      }
     }
   }
   
-  return params;
+  if (debug) {
+    console.log('[TelegramAuth] Extracted and decoded parameters:');
+    Object.entries(params).forEach(([key, value]) => {
+      console.log(`  ${key}:`, value);
+    });
+    console.log('[TelegramAuth] Hash:', hash);
+  }
+  
+  return { params, hash };
+}
+
+// Функция для формирования data-check-string согласно требованиям Telegram
+function buildDataCheckString(params: Record<string, string>, debug: boolean = false): string {
+  // Исключаем signature (если есть) и оставляем только разрешенные параметры
+  const { signature, ...validParams } = params;
+  
+  // Сортируем параметры в алфавитном порядке по ключу
+  const sortedEntries = Object.entries(validParams)
+    .sort(([a], [b]) => a.localeCompare(b));
+  
+  // Формируем строку в формате "key=value" с декодированными значениями
+  const dataCheckString = sortedEntries
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n');
+  
+  if (debug) {
+    console.log('[TelegramAuth] Sorted parameters for data-check-string:');
+    sortedEntries.forEach(([key, value]) => {
+      console.log(`  ${key}=${value}`);
+    });
+    console.log('[TelegramAuth] Final data-check-string:');
+    console.log('```');
+    console.log(dataCheckString);
+    console.log('```');
+  }
+  
+  return dataCheckString;
 }
 
 export async function validateInitData(
@@ -131,35 +183,20 @@ export async function validateInitData(
   // Проверяем переменные окружения
   const BOT_TOKEN = validateEnvironmentVariables(debug);
 
-  // Используем ручной парсинг для лучшего контроля над кодированием
-  const searchParams = parseInitDataManually(initData);
+  // Извлекаем и подготавливаем параметры согласно требованиям Telegram
+  const { params, hash } = extractAndPrepareParams(initData, debug);
 
-  if (debug) {
-    console.log('[TelegramAuth] Parsed parameters:');
-    for (const [key, value] of searchParams.entries()) {
-      console.log(`  ${key}: ${value}`);
-    }
-  }
-
-  const hash = searchParams.get('hash');
-  if (!hash) {
-    throw new Error('Missing hash parameter in initData');
-  }
-
-  // Сохраняем копию параметров до удаления hash для отладки
-  const allParams = new URLSearchParams(searchParams);
-  searchParams.delete('hash');
-
-  const authDateStr = searchParams.get('auth_date');
-  if (!authDateStr) {
+  // Проверяем обязательные параметры
+  if (!params.auth_date) {
     throw new Error('Missing auth_date parameter in initData');
   }
   
-  const authDate = parseInt(authDateStr, 10);
+  const authDate = parseInt(params.auth_date, 10);
   if (isNaN(authDate)) {
     throw new Error('Invalid auth_date format. Expected UNIX timestamp');
   }
 
+  // Проверка времени
   if (!disableTimeCheck) {
     const currentTime = Math.floor(Date.now() / 1000);
     const timeDiff = currentTime - authDate;
@@ -178,35 +215,8 @@ export async function validateInitData(
     console.log('[TelegramAuth] Time validation disabled');
   }
 
-  // Формируем data-check-string с тщательной проверкой
-  const entries = Array.from(searchParams.entries());
-  
-  if (debug) {
-    console.log('[TelegramAuth] Parameters before sorting:');
-    entries.forEach(([key, value], index) => {
-      console.log(`  [${index}] ${key}: ${value}`);
-    });
-  }
-  
-  // Сортируем в лексикографическом порядке по ключу
-  entries.sort(([a], [b]) => a.localeCompare(b));
-  
-  if (debug) {
-    console.log('[TelegramAuth] Parameters after sorting:');
-    entries.forEach(([key, value], index) => {
-      console.log(`  [${index}] ${key}: ${value}`);
-    });
-  }
-  
-  const dataCheckString = entries.map(([key, value]) => `${key}=${value}`).join('\n');
-
-  if (debug) {
-    console.log('[TelegramAuth] Data check string:');
-    console.log('```');
-    console.log(dataCheckString);
-    console.log('```');
-    console.log('[TelegramAuth] Data check string length:', dataCheckString.length);
-  }
+  // Формируем data-check-string согласно требованиям Telegram
+  const dataCheckString = buildDataCheckString(params, debug);
 
   // Вычисляем секретный ключ
   const secretKeyInput = 'WebAppData' + BOT_TOKEN;
@@ -232,7 +242,6 @@ export async function validateInitData(
     console.log('[TelegramAuth] Received hash:', hash);
     console.log('[TelegramAuth] Hashes match:', calculatedHash === hash);
     
-    // Дополнительная диагностика
     console.log('[TelegramAuth] Hash length comparison:');
     console.log(`  Expected: ${calculatedHash.length} characters`);
     console.log(`  Received: ${hash.length} characters`);
@@ -245,20 +254,18 @@ export async function validateInitData(
           break;
         }
       }
+      
+      console.log('[TelegramAuth] === TROUBLESHOOTING SUGGESTIONS ===');
+      console.log('1. Verify BOT_TOKEN matches the one used by Telegram');
+      console.log('2. Ensure initData is passed exactly as received from Telegram');
+      console.log('3. Check that parameter values are properly URL-decoded');
+      console.log('4. Verify parameter order in data-check-string (alphabetical)');
+      console.log('5. Confirm only allowed parameters are included (auth_date, query_id, user)');
     }
   }
 
   // Сравниваем хэши
   if (calculatedHash !== hash) {
-    if (debug) {
-      console.log('[TelegramAuth] === TROUBLESHOOTING SUGGESTIONS ===');
-      console.log('1. Check if BOT_TOKEN matches the one used by the frontend');
-      console.log('2. Verify that initData is passed exactly as received from Telegram');
-      console.log('3. Ensure no URL encoding/decoding happens between frontend and backend');
-      console.log('4. Check parameter order in data-check-string (should be alphabetical)');
-      console.log('5. Verify that all parameters are included in the hash calculation');
-    }
-    
     throw new Error(`Invalid hash. Expected: ${calculatedHash}, Received: ${hash}`);
   }
 
@@ -268,13 +275,13 @@ export async function validateInitData(
 
   // Парсим данные пользователя
   try {
-    const userJson = searchParams.get('user');
+    const userJson = params.user;
     if (!userJson) {
       throw new Error('Missing user data in initData');
     }
     
     if (debug) {
-      console.log('[TelegramAuth] Raw user JSON:', userJson);
+      console.log('[TelegramAuth] User JSON to parse:', userJson);
     }
     
     const user = JSON.parse(userJson) as TelegramUser;
@@ -291,4 +298,4 @@ export async function validateInitData(
 }
 
 // Экспортируем вспомогательные функции для тестирования
-export { validateEnvironmentVariables, parseInitDataManually };
+export { validateEnvironmentVariables, extractAndPrepareParams, buildDataCheckString };

@@ -10,11 +10,19 @@ export const authInit = async (req: Request, res: Response): Promise<void> => {
     const { initData } = req.body;
     
     console.log('🔐 Auth init started with initData length:', initData?.length);
+    console.log('📋 First 100 chars of initData:', initData?.substring(0, 100));
     
     // Проверяем наличие initData
     if (!initData) {
       console.log('❌ Missing initData in request');
       res.status(400).json({ error: 'initData is required' });
+      return;
+    }
+    
+    // Проверяем базовый формат initData
+    if (!initData.includes('hash=') || !initData.includes('auth_date=')) {
+      console.log('❌ Invalid initData format - missing required fields');
+      res.status(400).json({ error: 'Invalid initData format' });
       return;
     }
     
@@ -47,22 +55,33 @@ export const authInit = async (req: Request, res: Response): Promise<void> => {
     });
     
   } catch (error) {
-    console.error('❌ Auth init error details:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : 'No stack trace',
-      timestamp: new Date().toISOString(),
-      initDataLength: req.body.initData?.length || 0
-    });
+    console.error('❌ Auth init error:', error);
+    
+    // Детальное логирование ошибки
+    if (error instanceof Error) {
+      console.error('❌ Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString(),
+        initDataLength: req.body.initData?.length || 0,
+        initDataPrefix: req.body.initData?.substring(0, 50) || 'None'
+      });
+    }
     
     let errorMessage = 'Authentication failed';
     let statusCode = 500;
     
     if (error instanceof Error) {
       // Определяем тип ошибки для соответствующего статуса
-      if (error.message.includes('validation') || error.message.includes('Invalid')) {
+      if (error.message.includes('validation') || 
+          error.message.includes('Invalid') || 
+          error.message.includes('signature')) {
         statusCode = 401;
-        errorMessage = 'Invalid initData';
-      } else if (error.message.includes('required') || error.message.includes('missing')) {
+        errorMessage = 'Invalid initData signature';
+      } else if (error.message.includes('required') || 
+                 error.message.includes('missing') ||
+                 error.message.includes('format')) {
         statusCode = 400;
         errorMessage = error.message;
       }
@@ -113,11 +132,16 @@ export const testAuth = async (req: Request, res: Response): Promise<void> => {
       }
     });
   } catch (error) {
-    console.error('❌ Test auth error details:', {
-      message: error instanceof Error ? error.message : 'Unknown error',
-      stack: error instanceof Error ? error.stack : 'No stack trace',
-      timestamp: new Date().toISOString()
-    });
+    console.error('❌ Test auth error:', error);
+    
+    if (error instanceof Error) {
+      console.error('❌ Test auth error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      });
+    }
     
     res.status(500).json({ 
       error: 'Test authentication failed',

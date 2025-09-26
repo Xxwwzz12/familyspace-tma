@@ -14,12 +14,14 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  error: string | null; // Добавлено поле для ошибок
   initializeAuth: (initDataRaw: string | null) => Promise<void>;
   login: (user: User, token: string) => void;
   logout: () => void;
   testAuth: () => Promise<void>;
   setToken: (token: string | null) => void;
   setUser: (user: User | null) => void;
+  clearError: () => void; // Добавлен метод для очистки ошибок
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -29,6 +31,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthenticated: false,
       isLoading: true,
+      error: null,
 
       /**
        * Инициализирует аутентификацию пользователя
@@ -36,14 +39,19 @@ export const useAuthStore = create<AuthState>()(
        */
       initializeAuth: async (initDataRaw: string | null) => {
         console.log('🔄 initializeAuth called with initDataRaw:', initDataRaw);
+        set({ isLoading: true, error: null });
         
         try {
           let response;
           
           if (initDataRaw) {
             // Настоящая Telegram аутентификация с использованием сырых данных
-            console.log('🔐 Authenticating with Telegram initDataRaw');
-            response = await apiClient.post('/auth/init', { initData: initDataRaw });
+            console.log('🔐 Authenticating with Telegram initData');
+            console.log('📤 Sending initData length:', initDataRaw.length);
+            
+            response = await apiClient.post('/auth/init', { 
+              initData: initDataRaw 
+            });
           } else {
             // Тестовая аутентификация (fallback)
             console.log('🧪 Using test authentication (initDataRaw is null)');
@@ -61,13 +69,70 @@ export const useAuthStore = create<AuthState>()(
             user, 
             token,
             isAuthenticated: true, 
-            isLoading: false 
+            isLoading: false,
+            error: null
           });
           
           console.log('✅ Authentication successful:', user);
-        } catch (error) {
+        } catch (error: any) {
           console.error('❌ Authentication failed:', error);
-          set({ isLoading: false });
+          
+          // Детальная обработка разных типов ошибок
+          if (error.response) {
+            // Ошибка от сервера с статусом
+            const status = error.response.status;
+            const message = error.response.data?.message || error.response.statusText;
+            
+            console.log(`⚙️ Server error ${status}:`, message);
+            
+            if (status === 401) {
+              console.log('🔐 InitData validation failed on server');
+              set({ error: 'Authentication failed: Invalid credentials' });
+            } else if (status === 400) {
+              console.log('📝 Bad request: Invalid initData format');
+              set({ error: 'Authentication failed: Invalid request format' });
+            } else if (status === 500) {
+              console.log('⚙️ Server error during authentication');
+              set({ error: 'Authentication failed: Server error' });
+            } else {
+              set({ error: `Authentication failed: ${message}` });
+            }
+          } else if (error.request) {
+            // Ошибка сети (нет ответа от сервера)
+            console.log('🌐 Network error: No response from server');
+            set({ error: 'Authentication failed: Network error - please check your connection' });
+            
+            // Fallback: попробовать тестовую аутентификацию при сетевой ошибке
+            console.log('🔄 Trying fallback to test authentication...');
+            try {
+              const testResponse = await apiClient.post('/auth/test');
+              const { user, token } = testResponse.data;
+              
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('auth_token', token);
+              }
+              
+              set({ 
+                user, 
+                token,
+                isAuthenticated: true, 
+                isLoading: false,
+                error: null
+              });
+              
+              console.log('✅ Fallback authentication successful');
+              return; // Успешный fallback, выходим
+            } catch (fallbackError) {
+              console.error('❌ Fallback authentication also failed:', fallbackError);
+              set({ error: 'Authentication failed: Network error and fallback also failed' });
+            }
+          } else {
+            // Другие ошибки
+            console.log('❓ Other error:', error.message);
+            set({ error: `Authentication failed: ${error.message}` });
+          }
+          
+          set({ isLoading: false, isAuthenticated: false });
         }
       },
 
@@ -76,6 +141,8 @@ export const useAuthStore = create<AuthState>()(
        */
       testAuth: async () => {
         console.log('🛜 testAuth called');
+        set({ isLoading: true, error: null });
+        
         try {
           const response = await apiClient.post('/auth/test');
           const { user, token } = response.data;
@@ -89,12 +156,22 @@ export const useAuthStore = create<AuthState>()(
             user, 
             token,
             isAuthenticated: true, 
-            isLoading: false 
+            isLoading: false,
+            error: null
           });
           
           console.log('✅ Test authentication successful:', user);
-        } catch (error) {
+        } catch (error: any) {
           console.error('❌ Test authentication failed:', error);
+          
+          if (error.response) {
+            const status = error.response.status;
+            const message = error.response.data?.message || error.response.statusText;
+            set({ error: `Test authentication failed: ${status} - ${message}` });
+          } else {
+            set({ error: `Test authentication failed: ${error.message}` });
+          }
+          
           set({ isLoading: false });
           throw error;
         }
@@ -116,7 +193,8 @@ export const useAuthStore = create<AuthState>()(
           user, 
           token,
           isAuthenticated: true,
-          isLoading: false 
+          isLoading: false,
+          error: null
         });
       },
 
@@ -134,7 +212,8 @@ export const useAuthStore = create<AuthState>()(
           user: null, 
           token: null,
           isAuthenticated: false,
-          isLoading: false 
+          isLoading: false,
+          error: null
         });
       },
 
@@ -151,7 +230,7 @@ export const useAuthStore = create<AuthState>()(
           localStorage.removeItem('auth_token');
         }
         
-        set({ token });
+        set({ token, error: null });
       },
 
       /**
@@ -160,7 +239,15 @@ export const useAuthStore = create<AuthState>()(
        */
       setUser: (user: User | null) => {
         console.log('👤 setUser called with:', user);
-        set({ user });
+        set({ user, error: null });
+      },
+
+      /**
+       * Очищает ошибку аутентификации
+       */
+      clearError: () => {
+        console.log('🧹 Clearing error');
+        set({ error: null });
       },
     }),
     {
@@ -168,7 +255,7 @@ export const useAuthStore = create<AuthState>()(
       onRehydrateStorage: () => (state) => {
         console.log('💾 Storage rehydrated', state);
         if (state && typeof state === 'object') {
-          return { ...state, isLoading: false };
+          return { ...state, isLoading: false, error: null };
         }
         return state;
       },
@@ -186,7 +273,8 @@ export const useAuthStore = create<AuthState>()(
             logout: currentState.logout,
             testAuth: currentState.testAuth,
             setToken: currentState.setToken,
-            setUser: currentState.setUser
+            setUser: currentState.setUser,
+            clearError: currentState.clearError
           };
         }
         return currentState;
