@@ -21,15 +21,11 @@ const FALLBACK_USER: TelegramUser = {
 
 // Функция для безопасной проверки переменных окружения
 function validateEnvironmentVariables(debug: boolean = false): string {
-  // Проверяем наличие BOT_TOKEN
   if (!process.env.BOT_TOKEN) {
     console.error('❌ BOT_TOKEN is not set in environment variables');
-    
-    // Логируем доступные переменные окружения (без значений для безопасности)
     const envKeys = Object.keys(process.env).sort();
     console.log('📋 Available environment variables:', envKeys.join(', '));
     
-    // Проверяем похожие переменные
     const similarVars = envKeys.filter(key => 
       key.includes('BOT') || key.includes('TOKEN') || key.includes('TELEGRAM')
     );
@@ -43,29 +39,24 @@ function validateEnvironmentVariables(debug: boolean = false): string {
   
   const BOT_TOKEN = process.env.BOT_TOKEN.trim();
   
-  // Проверяем, что токен не пустой после trim()
   if (!BOT_TOKEN) {
     console.error('❌ BOT_TOKEN is set but empty or contains only whitespace');
     throw new Error('BOT_TOKEN is empty or contains only whitespace');
   }
   
-  // Проверяем базовый формат токена (должен быть в формате "число:секрет")
   if (!BOT_TOKEN.match(/^\d+:[a-zA-Z0-9_-]+$/)) {
     console.error('❌ Invalid BOT_TOKEN format');
-    
-    // Маскируем токен для безопасного логирования (показываем только первые 10 символов)
     const maskedToken = BOT_TOKEN.length > 10 
       ? BOT_TOKEN.substring(0, 10) + '...' 
       : BOT_TOKEN;
     
     console.log('🔒 BOT_TOKEN (masked):', maskedToken);
-    console.log('📝 Expected format: "number:secret" (e.g., "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz")');
+    console.log('📝 Expected format: "number:secret"');
     
     throw new Error('Invalid BOT_TOKEN format. Expected format: "number:secret"');
   }
   
   if (debug) {
-    // В debug режиме показываем маскированную версию токена
     const maskedToken = BOT_TOKEN.substring(0, 5) + '...' + BOT_TOKEN.substring(BOT_TOKEN.length - 5);
     console.log('✅ BOT_TOKEN is available and valid (masked):', maskedToken);
     console.log('✅ BOT_TOKEN length:', BOT_TOKEN.length);
@@ -76,6 +67,23 @@ function validateEnvironmentVariables(debug: boolean = false): string {
   return BOT_TOKEN;
 }
 
+// Функция для ручного парсинга initData без автоматического декодирования
+function parseInitDataManually(initData: string): URLSearchParams {
+  const params = new URLSearchParams();
+  const pairs = initData.split('&');
+  
+  for (const pair of pairs) {
+    const [key, ...valueParts] = pair.split('=');
+    const value = valueParts.join('='); // На случай, если значение содержит '='
+    
+    if (key && value !== undefined) {
+      params.append(key, value);
+    }
+  }
+  
+  return params;
+}
+
 export async function validateInitData(
   initData: string, 
   options: ValidationOptions = {}
@@ -83,7 +91,8 @@ export async function validateInitData(
   const { disableTimeCheck = false, debug = false } = options;
   
   if (debug) {
-    console.log('[TelegramAuth] InitData received:', initData);
+    console.log('=== TELEGRAM AUTH DEBUG START ===');
+    console.log('[TelegramAuth] Raw initData received:', initData);
     console.log('[TelegramAuth] Validation options:', { disableTimeCheck, debug });
   }
 
@@ -93,13 +102,11 @@ export async function validateInitData(
       console.log('[TelegramAuth] Development fallback mode detected');
     }
     
-    // Парсим initData чтобы извлечь user, если он есть
     const params = new URLSearchParams(initData);
     const userParam = params.get('user');
     
     if (userParam) {
       try {
-        // Пытаемся декодировать и распарсить данные пользователя
         const userData = JSON.parse(decodeURIComponent(userParam));
         
         if (debug) {
@@ -114,7 +121,6 @@ export async function validateInitData(
       }
     }
     
-    // Возвращаем тестового пользователя по умолчанию
     if (debug) {
       console.log('[TelegramAuth] Returning fallback user:', FALLBACK_USER);
     }
@@ -122,20 +128,28 @@ export async function validateInitData(
     return FALLBACK_USER;
   }
 
-  // Проверяем переменные окружения с улучшенной диагностикой
+  // Проверяем переменные окружения
   const BOT_TOKEN = validateEnvironmentVariables(debug);
 
-  // Разбиваем строку на параметры. НЕ декодируем значения!
-  const searchParams = new URLSearchParams(initData);
+  // Используем ручной парсинг для лучшего контроля над кодированием
+  const searchParams = parseInitDataManually(initData);
 
-  // Извлекаем хэш и сразу удаляем его из списка параметров для проверки.
+  if (debug) {
+    console.log('[TelegramAuth] Parsed parameters:');
+    for (const [key, value] of searchParams.entries()) {
+      console.log(`  ${key}: ${value}`);
+    }
+  }
+
   const hash = searchParams.get('hash');
   if (!hash) {
     throw new Error('Missing hash parameter in initData');
   }
+
+  // Сохраняем копию параметров до удаления hash для отладки
+  const allParams = new URLSearchParams(searchParams);
   searchParams.delete('hash');
 
-  // Проверяем актуальность auth_date
   const authDateStr = searchParams.get('auth_date');
   if (!authDateStr) {
     throw new Error('Missing auth_date parameter in initData');
@@ -164,57 +178,110 @@ export async function validateInitData(
     console.log('[TelegramAuth] Time validation disabled');
   }
 
-  // 1. Формируем data-check-string из ОРИГИНАЛЬНЫХ параметров.
-  // Сортируем параметры по ключу в алфавитном порядке.
+  // Формируем data-check-string с тщательной проверкой
   const entries = Array.from(searchParams.entries());
+  
+  if (debug) {
+    console.log('[TelegramAuth] Parameters before sorting:');
+    entries.forEach(([key, value], index) => {
+      console.log(`  [${index}] ${key}: ${value}`);
+    });
+  }
+  
+  // Сортируем в лексикографическом порядке по ключу
   entries.sort(([a], [b]) => a.localeCompare(b));
   
-  // Собираем строку в формате "key=<value>", где value не декодировано.
+  if (debug) {
+    console.log('[TelegramAuth] Parameters after sorting:');
+    entries.forEach(([key, value], index) => {
+      console.log(`  [${index}] ${key}: ${value}`);
+    });
+  }
+  
   const dataCheckString = entries.map(([key, value]) => `${key}=${value}`).join('\n');
 
   if (debug) {
-    console.log('[TelegramAuth] Data check string:', dataCheckString);
-    console.log('[TelegramAuth] Entries:', entries);
+    console.log('[TelegramAuth] Data check string:');
+    console.log('```');
+    console.log(dataCheckString);
+    console.log('```');
+    console.log('[TelegramAuth] Data check string length:', dataCheckString.length);
   }
 
-  // 2. Правильно вычисляем секретный ключ.
-  // Ключ = SHA256("WebAppData" + BOT_TOKEN)
+  // Вычисляем секретный ключ
+  const secretKeyInput = 'WebAppData' + BOT_TOKEN;
   const secretKey = crypto
     .createHash('sha256')
-    .update('WebAppData' + BOT_TOKEN)
+    .update(secretKeyInput)
     .digest();
 
-  // 3. Вычисляем хэш от dataCheckString с использованием секретного ключа.
+  if (debug) {
+    console.log('[TelegramAuth] Secret key input:', secretKeyInput);
+    console.log('[TelegramAuth] Secret key (hex):', secretKey.toString('hex'));
+  }
+
+  // Вычисляем HMAC
   const calculatedHash = crypto
     .createHmac('sha256', secretKey)
     .update(dataCheckString)
     .digest('hex');
 
   if (debug) {
+    console.log('[TelegramAuth] === HASH COMPARISON ===');
     console.log('[TelegramAuth] Expected hash:', calculatedHash);
     console.log('[TelegramAuth] Received hash:', hash);
-    console.log('[TelegramAuth] Secret key source:', 'WebAppData' + BOT_TOKEN);
+    console.log('[TelegramAuth] Hashes match:', calculatedHash === hash);
+    
+    // Дополнительная диагностика
+    console.log('[TelegramAuth] Hash length comparison:');
+    console.log(`  Expected: ${calculatedHash.length} characters`);
+    console.log(`  Received: ${hash.length} characters`);
+    
+    if (calculatedHash !== hash) {
+      console.log('[TelegramAuth] Hash mismatch analysis:');
+      for (let i = 0; i < Math.max(calculatedHash.length, hash.length); i++) {
+        if (calculatedHash[i] !== hash[i]) {
+          console.log(`  First difference at position ${i}: expected '${calculatedHash[i]}', got '${hash[i]}'`);
+          break;
+        }
+      }
+    }
   }
 
   // Сравниваем хэши
   if (calculatedHash !== hash) {
-    throw new Error(`Invalid hash. Expected: ${calculatedHash}, Received: ${hash}. Check BOT_TOKEN and parameter encoding.`);
+    if (debug) {
+      console.log('[TelegramAuth] === TROUBLESHOOTING SUGGESTIONS ===');
+      console.log('1. Check if BOT_TOKEN matches the one used by the frontend');
+      console.log('2. Verify that initData is passed exactly as received from Telegram');
+      console.log('3. Ensure no URL encoding/decoding happens between frontend and backend');
+      console.log('4. Check parameter order in data-check-string (should be alphabetical)');
+      console.log('5. Verify that all parameters are included in the hash calculation');
+    }
+    
+    throw new Error(`Invalid hash. Expected: ${calculatedHash}, Received: ${hash}`);
   }
 
   if (debug) {
-    console.log('[TelegramAuth] Hash validation successful');
+    console.log('[TelegramAuth] Hash validation successful ✅');
   }
 
-  // Парсим и возвращаем данные пользователя
+  // Парсим данные пользователя
   try {
     const userJson = searchParams.get('user');
     if (!userJson) {
       throw new Error('Missing user data in initData');
     }
+    
+    if (debug) {
+      console.log('[TelegramAuth] Raw user JSON:', userJson);
+    }
+    
     const user = JSON.parse(userJson) as TelegramUser;
     
     if (debug) {
-      console.log('[TelegramAuth] User data:', user);
+      console.log('[TelegramAuth] Parsed user data:', user);
+      console.log('=== TELEGRAM AUTH DEBUG END ===');
     }
     
     return user;
@@ -223,5 +290,5 @@ export async function validateInitData(
   }
 }
 
-// Экспортируем функцию для тестирования
-export { validateEnvironmentVariables };
+// Экспортируем вспомогательные функции для тестирования
+export { validateEnvironmentVariables, parseInitDataManually };
