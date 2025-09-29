@@ -19,6 +19,11 @@ const FALLBACK_USER: TelegramUser = {
   allows_write_to_pm: true
 };
 
+// Проверка режима отладки хэша
+const isHashCheckDisabled = (): boolean => {
+  return process.env.DEBUG_SKIP_HASH_CHECK === 'true';
+};
+
 function validateEnvironmentVariables(debug = false): string {
   if (!process.env.BOT_TOKEN) {
     if (debug) console.error('❌ BOT_TOKEN not set');
@@ -36,6 +41,13 @@ function validateEnvironmentVariables(debug = false): string {
     const masked = BOT_TOKEN.substring(0, 5) + '...' + BOT_TOKEN.substring(BOT_TOKEN.length - 5);
     console.log('✅ BOT_TOKEN (masked):', masked, 'len=', BOT_TOKEN.length);
   }
+  
+  // Предупреждение о режиме отладки
+  if (isHashCheckDisabled()) {
+    console.warn('⚠️  DEBUG_SKIP_HASH_CHECK is enabled - HASH VERIFICATION IS DISABLED');
+    console.warn('⚠️  This should only be used for temporary debugging purposes');
+  }
+  
   return BOT_TOKEN;
 }
 
@@ -66,7 +78,7 @@ function extractAndPrepareParams(initData: string, debug = false) {
     }
   }
 
-  if (debug) {
+  if (debug || isHashCheckDisabled()) {
     console.log('[TelegramAuth] Decoded params for logic:', params);
     console.log('[TelegramAuth] Raw params (URL-encoded):', rawParams);
     console.log('[TelegramAuth] Received hash:', hash);
@@ -100,7 +112,7 @@ function buildDataCheckString(rawParams: Record<string, string>, includeSignatur
   entries.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   const dcs = entries.map(([k, v]) => `${k}=${v}`).join('\n');
 
-  if (debug) {
+  if (debug || isHashCheckDisabled()) {
     console.log(`🔐 DCS (includeSignature=${includeSignature} includeAll=${includeAllParams}) length=${dcs.length}:`);
     console.log(dcs);
   }
@@ -134,7 +146,7 @@ function buildSecretCandidates(botToken: string, debug = false) {
   // Variant 5: BOT_TOKEN raw string (some servers incorrectly use raw token)
   list.push({ name: 'BOT_TOKEN.raw', key: botToken });
 
-  if (debug) {
+  if (debug || isHashCheckDisabled()) {
     console.log('[TelegramAuth] Secret candidates:');
     list.forEach((c) => {
       const keyDesc = Buffer.isBuffer(c.key) ? `Buffer(len=${(c.key as Buffer).length})` : `string(len=${(c.key as string).length})`;
@@ -149,31 +161,36 @@ function buildSecretCandidates(botToken: string, debug = false) {
 // Главная валидация
 export async function validateInitData(initData: string, options: ValidationOptions = {}): Promise<TelegramUser> {
   const { disableTimeCheck = false, debug = false } = options;
-  if (debug) {
+  const hashCheckDisabled = isHashCheckDisabled();
+  
+  if (debug || hashCheckDisabled) {
     console.log('=== TELEGRAM AUTH DEBUG START ===');
     console.log('[TelegramAuth] raw initData:', initData.slice(0, 1000));
     console.log('[TelegramAuth] options:', { disableTimeCheck, debug });
+    if (hashCheckDisabled) {
+      console.warn('🚨 HASH VERIFICATION DISABLED - DEBUG_SKIP_HASH_CHECK=true');
+    }
   }
 
   // dev fallback
   if (initData.includes('hash=development_fallback_hash')) {
-    if (debug) console.log('[TelegramAuth] development fallback');
+    if (debug || hashCheckDisabled) console.log('[TelegramAuth] development fallback');
     const qs = new URLSearchParams(initData);
     const userParam = qs.get('user');
     if (userParam) {
       try {
         const u = JSON.parse(decodeURIComponent(userParam));
-        if (debug) console.log('[TelegramAuth] fallback user:', u);
+        if (debug || hashCheckDisabled) console.log('[TelegramAuth] fallback user:', u);
         return u;
       } catch (err) {
-        if (debug) console.warn('failed parse fallback user', err);
+        if (debug || hashCheckDisabled) console.warn('failed parse fallback user', err);
       }
     }
     return FALLBACK_USER;
   }
 
-  const BOT_TOKEN = validateEnvironmentVariables(debug);
-  const { params, rawParams, hash } = extractAndPrepareParams(initData, debug);
+  const BOT_TOKEN = validateEnvironmentVariables(debug || hashCheckDisabled);
+  const { params, rawParams, hash } = extractAndPrepareParams(initData, debug || hashCheckDisabled);
 
   if (!params.auth_date) throw new Error('Missing auth_date');
   const authDate = parseInt(params.auth_date, 10);
@@ -182,75 +199,105 @@ export async function validateInitData(initData: string, options: ValidationOpti
   if (!disableTimeCheck) {
     const now = Math.floor(Date.now() / 1000);
     const diff = now - authDate;
-    if (debug) {
+    if (debug || hashCheckDisabled) {
       console.log('[TelegramAuth] auth_date:', new Date(authDate * 1000).toISOString(), 'now:', new Date(now * 1000).toISOString(), 'diffSec=', diff);
     }
     if (diff > 30 * 60) throw new Error('Auth date too old');
-  } else if (debug) {
+  } else if (debug || hashCheckDisabled) {
     console.log('[TelegramAuth] time check disabled');
   }
 
-  // Подготовим кандидатов секретного ключа
-  const secretCandidates = buildSecretCandidates(BOT_TOKEN, debug);
+  // Если проверка хэша отключена, пропускаем всю логику проверки хэша
+  if (hashCheckDisabled) {
+    console.warn('⚠️  SKIPPING HASH VERIFICATION - DEBUG_SKIP_HASH_CHECK=true');
+    console.warn('⚠️  This should only be used for temporary debugging');
+    
+    // Все равно вычисляем и логируем ожидаемые хэши для диагностики
+    const secretCandidates = buildSecretCandidates(BOT_TOKEN, true);
+    const computed: Array<{includeSignature: boolean; includeAll: boolean; secretName: string; calcHash: string; dcs: string}> = [];
 
-  // Попробуем комбинации:
-  // - includeSignature: true/false
-  // - includeAllParams: true/false (all except hash OR only whitelist)
-  // - each secret candidate
-  type Candidate = { includeSignature: boolean; includeAll: boolean; secretName: string; calcHash: string; dcs: string };
-  const computed: Candidate[] = [];
-
-  for (const includeSignature of [true, false]) {
-    for (const includeAllParams of [true, false]) {
-      const dcs = buildDataCheckString(rawParams, includeSignature, includeAllParams, debug);
-
-      for (const sc of secretCandidates) {
-        try {
-          const calc = crypto.createHmac('sha256', sc.key as crypto.BinaryLike).update(dcs).digest('hex');
-          computed.push({ includeSignature, includeAll: includeAllParams, secretName: sc.name, calcHash: calc, dcs });
-        } catch (err) {
-          if (debug) console.warn('HMAC compute failed for', sc.name, err);
+    for (const includeSignature of [true, false]) {
+      for (const includeAllParams of [true, false]) {
+        const dcs = buildDataCheckString(rawParams, includeSignature, includeAllParams, true);
+        for (const sc of secretCandidates) {
+          try {
+            const calc = crypto.createHmac('sha256', sc.key as crypto.BinaryLike).update(dcs).digest('hex');
+            computed.push({ includeSignature, includeAll: includeAllParams, secretName: sc.name, calcHash: calc, dcs });
+          } catch (err) {
+            console.warn('HMAC compute failed for', sc.name, err);
+          }
         }
       }
     }
-  }
 
-  if (debug) {
-    console.log('[TelegramAuth] computed hashes (top 20):');
-    computed.slice(0, 20).forEach((c, i) => {
-      console.log(`${i + 1}. secret=${c.secretName} includeSig=${c.includeSignature} includeAll=${c.includeAll} hash=${c.calcHash}`);
+    console.log('[TelegramAuth] COMPUTED HASHES (for diagnostics):');
+    computed.slice(0, 10).forEach((c, i) => {
+      const matchIndicator = c.calcHash === hash ? ' ✅ MATCH' : ' ❌ MISMATCH';
+      console.log(`${i + 1}. secret=${c.secretName} includeSig=${c.includeSignature} includeAll=${c.includeAll} hash=${c.calcHash}${matchIndicator}`);
     });
-  }
+    console.log('[TelegramAuth] RECEIVED HASH:', hash);
+    
+    // Продолжаем без проверки хэша
+  } else {
+    // Нормальная проверка хэша
+    const secretCandidates = buildSecretCandidates(BOT_TOKEN, debug);
+    const computed: Array<{includeSignature: boolean; includeAll: boolean; secretName: string; calcHash: string; dcs: string}> = [];
 
-  const match = computed.find(c => c.calcHash === hash);
-  if (!match) {
-    if (debug) {
-      console.log('[TelegramAuth] No match. Dumping candidate details for analysis (first 8):');
-      computed.slice(0, 8).forEach((c, i) => {
-        console.log('--- Candidate', i + 1, '---');
-        console.log('secret:', c.secretName, 'includeSig=', c.includeSignature, 'includeAll=', c.includeAll);
-        console.log('calculatedHash:', c.calcHash);
-        console.log('DCS (first 500 chars):');
-        console.log(c.dcs.slice(0, 500));
-      });
-      console.log('[TelegramAuth] RECEIVED hash:', hash);
+    for (const includeSignature of [true, false]) {
+      for (const includeAllParams of [true, false]) {
+        const dcs = buildDataCheckString(rawParams, includeSignature, includeAllParams, debug);
+        for (const sc of secretCandidates) {
+          try {
+            const calc = crypto.createHmac('sha256', sc.key as crypto.BinaryLike).update(dcs).digest('hex');
+            computed.push({ includeSignature, includeAll: includeAllParams, secretName: sc.name, calcHash: calc, dcs });
+          } catch (err) {
+            if (debug) console.warn('HMAC compute failed for', sc.name, err);
+          }
+        }
+      }
     }
-    // Кинем информативную ошибку
-    throw new Error(`Invalid hash. None of ${computed.length} computed variants matched received hash (${hash}).`);
+
+    if (debug) {
+      console.log('[TelegramAuth] computed hashes (top 20):');
+      computed.slice(0, 20).forEach((c, i) => {
+        console.log(`${i + 1}. secret=${c.secretName} includeSig=${c.includeSignature} includeAll=${c.includeAll} hash=${c.calcHash}`);
+      });
+    }
+
+    const match = computed.find(c => c.calcHash === hash);
+    if (!match) {
+      if (debug) {
+        console.log('[TelegramAuth] No match. Dumping candidate details for analysis (first 8):');
+        computed.slice(0, 8).forEach((c, i) => {
+          console.log('--- Candidate', i + 1, '---');
+          console.log('secret:', c.secretName, 'includeSig=', c.includeSignature, 'includeAll=', c.includeAll);
+          console.log('calculatedHash:', c.calcHash);
+          console.log('DCS (first 500 chars):');
+          console.log(c.dcs.slice(0, 500));
+        });
+        console.log('[TelegramAuth] RECEIVED hash:', hash);
+      }
+      throw new Error(`Invalid hash. None of ${computed.length} computed variants matched received hash (${hash}).`);
+    }
+
+    if (debug) {
+      console.log('[TelegramAuth] Matched candidate:', match.secretName, 'includeSig=', match.includeSignature, 'includeAll=', match.includeAll);
+      console.log('[TelegramAuth] Hash validated ✅');
+    }
   }
 
-  if (debug) {
-    console.log('[TelegramAuth] Matched candidate:', match.secretName, 'includeSig=', match.includeSignature, 'includeAll=', match.includeAll);
-    console.log('[TelegramAuth] Hash validated ✅');
-  }
-
-  // Если всё ок — парсим user JSON (из decoded params)
+  // Парсим user JSON (из decoded params) - это происходит в любом случае
   try {
     const userJson = params.user;
     if (!userJson) throw new Error('Missing user JSON');
-    if (debug) console.log('[TelegramAuth] userJson to parse:', userJson);
+    if (debug || hashCheckDisabled) console.log('[TelegramAuth] userJson to parse:', userJson);
     const user = JSON.parse(userJson) as TelegramUser;
-    if (debug) console.log('[TelegramAuth] parsed user:', user);
+    if (debug || hashCheckDisabled) {
+      console.log('[TelegramAuth] parsed user:', user);
+      if (hashCheckDisabled) {
+        console.warn('✅ AUTHENTICATION SUCCESSFUL (HASH CHECK SKIPPED)');
+      }
+    }
     return user;
   } catch (err) {
     throw new Error(`Invalid user JSON: ${err instanceof Error ? err.message : String(err)}`);
@@ -258,4 +305,4 @@ export async function validateInitData(initData: string, options: ValidationOpti
 }
 
 // Экспорт для тестов
-export { validateEnvironmentVariables, extractAndPrepareParams, buildDataCheckString };
+export { validateEnvironmentVariables, extractAndPrepareParams, buildDataCheckString, isHashCheckDisabled };
