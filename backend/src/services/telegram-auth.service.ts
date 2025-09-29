@@ -19,9 +19,12 @@ const FALLBACK_USER: TelegramUser = {
   allows_write_to_pm: true
 };
 
+// ВРЕМЕННО: принудительно включаем отладку хэша
+const DEBUG_SKIP_HASH_CHECK = process.env.DEBUG_SKIP_HASH_CHECK === 'true' || true; // принудительно true
+
 // Проверка режима отладки хэша
 const isHashCheckDisabled = (): boolean => {
-  return process.env.DEBUG_SKIP_HASH_CHECK === 'true';
+  return DEBUG_SKIP_HASH_CHECK;
 };
 
 function validateEnvironmentVariables(debug = false): string {
