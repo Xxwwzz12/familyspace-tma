@@ -29,6 +29,24 @@ function App() {
     initializeAuth();
   }, [initializeAuth]);
 
+  // 🔧 Инициализация Eruda только при явном указании debug=true в URL
+  useEffect(() => {
+    // Более надежная проверка параметра debug
+    if (window.location.search.includes('debug=true')) {
+      console.log('🔧 Debug mode activated, initializing Eruda...');
+      
+      import('eruda')
+        .then((erudaModule) => {
+          const eruda = erudaModule.default;
+          eruda.init();
+          console.log('✅ Eruda debug console initialized successfully');
+        })
+        .catch((error) => {
+          console.error('❌ Failed to initialize Eruda:', error);
+        });
+    }
+  }, []);
+
   // Пока приложение инициализируется, показываем загрузку
   if (!isInitialized || isLoading) {
     console.log('⏳ Showing loading state', { isInitialized, isLoading, error });
@@ -67,7 +85,7 @@ function App() {
   if (!isAuthenticated) {
     console.log('🔐 User not authenticated, showing auth screen', { 
       environment: Environment.getEnvironment(),
-      authMethod 
+      authMethod
     });
     
     // В зависимости от окружения показываем соответствующий экран аутентификации
@@ -105,6 +123,7 @@ function App() {
       );
     } else {
       // В браузере показываем экран аутентификации через Telegram Widget
+      console.log('🌐 Showing BrowserAuthScreen');
       return <BrowserAuthScreen />;
     }
   }
@@ -113,7 +132,7 @@ function App() {
   console.log('🎯 Rendering main app', { 
     authMethod, 
     isAuthenticated, 
-    isInitialized 
+    isInitialized
   });
 
   return (

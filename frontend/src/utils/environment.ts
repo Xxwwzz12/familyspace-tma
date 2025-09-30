@@ -30,6 +30,11 @@ declare global {
   }
 }
 
+// Список допустимых платформ для настоящего TMA
+const VALID_TELEGRAM_PLATFORMS = [
+  'android', 'ios', 'tdesktop', 'macos', 'windows', 'linux', 'unknown'
+];
+
 export const Environment = {
   /**
    * Определяет тип окружения приложения с улучшенной проверкой подлинности TMA
@@ -72,10 +77,12 @@ export const Environment = {
       this.isValidInitData(webApp.initData)
     );
 
-    // Фактор 2: Проверка платформы (дополнительный критерий)
+    // Фактор 2: Строгая проверка платформы
     const hasValidPlatform = (
       webApp.platform && 
-      ['android', 'ios', 'tdesktop', 'macos', 'web', 'weba', 'unknown'].includes(webApp.platform)
+      VALID_TELEGRAM_PLATFORMS.includes(webApp.platform) &&
+      // Критически важно: исключаем платформу 'web' - это браузерная эмуляция
+      webApp.platform !== 'web'
     );
 
     // Фактор 3: Проверка версии (дополнительный критерий)
@@ -92,18 +99,18 @@ export const Environment = {
       webApp.viewportHeight > 0
     );
 
-    // Комбинированная проверка: initData ОБЯЗАТЕЛЕН, плюс хотя бы один дополнительный фактор
-    const isLikelyRealTelegram = hasValidInitData && (
-      hasValidPlatform || 
+    // Комбинированная проверка: initData ОБЯЗАТЕЛЕН + валидная платформа + хотя бы один дополнительный фактор
+    const isLikelyRealTelegram = hasValidInitData && hasValidPlatform && (
       hasValidVersion || 
       hasWebAppProperties
     );
 
-    // Дополнительная проверка: если в браузерном окружении есть подозрительные объекты
-    if (!isLikelyRealTelegram && webApp) {
+    // Детальное логирование для отладки
+    if (webApp && !isLikelyRealTelegram) {
       console.warn('Обнаружен подозрительный объект Telegram WebApp:', {
         hasValidInitData,
         hasValidPlatform,
+        platform: webApp.platform,
         hasValidVersion,
         hasWebAppProperties,
         userAgent: navigator.userAgent,
@@ -164,6 +171,7 @@ export const Environment = {
     initDataRaw?: string;
     initDataUnsafe?: any;
     isValid?: boolean;
+    platform?: string;
   } {
     if (this.isRealTelegramMiniApp() && window.Telegram?.WebApp) {
       const webApp = window.Telegram.WebApp;
@@ -173,7 +181,8 @@ export const Environment = {
         initData: webApp.initData,
         initDataRaw: webApp.initData,
         initDataUnsafe: webApp.initDataUnsafe,
-        isValid
+        isValid,
+        platform: webApp.platform
       };
     }
 
@@ -188,9 +197,13 @@ export const Environment = {
     
     if (env === 'telegram' && window.Telegram?.WebApp) {
       const webApp = window.Telegram.WebApp;
+      const platformValidity = VALID_TELEGRAM_PLATFORMS.includes(webApp.platform || '') && 
+                              webApp.platform !== 'web';
+      
       return {
         environment: 'telegram',
         platform: webApp.platform,
+        platformValid: platformValidity,
         version: webApp.version,
         colorScheme: webApp.colorScheme,
         isExpanded: webApp.isExpanded,
@@ -234,6 +247,13 @@ export const Environment = {
   },
 
   /**
+   * Получает список допустимых платформ для TMA (для тестирования)
+   */
+  getValidTelegramPlatforms(): string[] {
+    return [...VALID_TELEGRAM_PLATFORMS];
+  },
+
+  /**
    * Инициализация Telegram WebApp (только для настоящего TMA)
    */
   initializeTelegramWebApp(): void {
@@ -254,6 +274,7 @@ export const Environment = {
         console.log('Telegram WebApp initialized:', {
           platform: webApp.platform,
           version: webApp.version,
+          platformValid: VALID_TELEGRAM_PLATFORMS.includes(webApp.platform || '') && webApp.platform !== 'web',
           initDataValid: this.isValidInitData(webApp.initData || '')
         });
       } catch (error) {
