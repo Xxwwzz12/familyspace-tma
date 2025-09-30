@@ -136,6 +136,39 @@ export const useTelegram = () => {
     };
   }, []);
 
+  // 🔍 ЛОГИРОВАНИЕ ОРИГИНАЛЬНЫХ ДАННЫХ TELEGRAM
+  useEffect(() => {
+    if (window.Telegram?.WebApp) {
+      // Сохраняем оригинальные данные ДО любых модификаций
+      const originalInitData = window.Telegram.WebApp.initData;
+      console.log('🔍 ОРИГИНАЛЬНЫЕ ДАННЫЕ TELEGRAM:', {
+        initData: originalInitData,
+        initDataUnsafe: window.Telegram.WebApp.initDataUnsafe,
+        version: window.Telegram.WebApp.version,
+        platform: window.Telegram.WebApp.platform
+      });
+      
+      // Сравниваем с тем, что отправляется на бэкенд
+      const sentData = originalInitData; // или то, что вы отправляете
+      console.log('🔍 СРАВНЕНИЕ ДАННЫХ:', {
+        original: originalInitData,
+        sent: sentData,
+        isEqual: originalInitData === sentData
+      });
+
+      // Дополнительная проверка хэша
+      if (originalInitData) {
+        const hashMatch = originalInitData.match(/hash=([^&]*)/);
+        if (hashMatch) {
+          console.log('🔐 ХЭШ ДАННЫХ:', hashMatch[1]);
+          console.log('📏 ДЛИНА ХЭША:', hashMatch[1].length);
+        } else {
+          console.warn('⚠️ ХЭШ НЕ НАЙДЕН В ДАННЫХ');
+        }
+      }
+    }
+  }, []);
+
   const isTelegramEnv = useMemo(() => {
     return isSDKReady && 
            typeof window.Telegram !== 'undefined' && 
@@ -192,6 +225,12 @@ export const useTelegram = () => {
       const hashIndex = rawInitData.indexOf('hash=');
       if (hashIndex !== -1) {
         console.log('✅ Hash found in initData at position:', hashIndex);
+        
+        // Извлекаем и логируем хэш для проверки
+        const hashMatch = rawInitData.match(/hash=([^&]*)/);
+        if (hashMatch) {
+          console.log('🔐 ХЭШ ПЕРЕДАВАЕМЫХ ДАННЫХ:', hashMatch[1]);
+        }
       } else {
         console.warn('⚠️ Hash not found in initData');
       }
