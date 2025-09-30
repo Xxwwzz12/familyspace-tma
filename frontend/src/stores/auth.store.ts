@@ -42,57 +42,18 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         
         try {
-          // 🔴 ВРЕМЕННО: Закомментировать вызов API
-          console.log('🔧 ВРЕМЕННО: Аутентификация отключена, устанавливаем тестового пользователя');
-          
-          // 🟢 ВРЕМЕННО: Установить тестового пользователя
-          const testUser = {
-            id: '303987836',
-            firstName: 'Егор',
-            lastName: 'Гуревич',
-            username: 'gurevichegor'
-          };
-          
-          const testToken = 'test-token-' + Date.now();
-          
-          // Сохраняем токен
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('auth_token', testToken);
-          }
-          
-          set({ 
-            user: testUser, 
-            token: testToken,
-            isAuthenticated: true, 
-            isLoading: false,
-            error: null
-          });
-          
-          console.log('✅ ВРЕМЕННО: Установлен тестовый пользователь:', testUser);
-
-          // 💾 Сохранить данные для отображения на странице
-          if (typeof window !== 'undefined') {
-            (window as any).debugAuth = {
-              status: 'AUTH_DISABLED_TEMPORARILY',
-              user: testUser,
-              initData: initDataRaw,
-              timestamp: new Date().toISOString(),
-              storeState: 'TEST_USER_SET'
-            };
-          }
-
-          // 🔴 ВРЕМЕННО ЗАКОММЕНТИРОВАН ВЫЗОВ API
-          /*
           let response;
           
           if (initDataRaw) {
-            // Настоящая Telegram аутентификация с использованием сырых данных
-            console.log('🔐 Authenticating with Telegram initData');
+            // 🟢 РАСКОММЕНТИРОВАН нормальный вызов API
+            console.log('🔐 Отправляем аутентификацию на бэкенд...');
             console.log('📤 Sending initData length:', initDataRaw.length);
             
             response = await apiClient.post('/auth/init', { 
               initData: initDataRaw 
             });
+            
+            console.log('✅ Ответ от бэкенда:', response);
           } else {
             // Тестовая аутентификация (fallback)
             console.log('🧪 Using test authentication (initDataRaw is null)');
@@ -115,13 +76,28 @@ export const useAuthStore = create<AuthState>()(
           });
           
           console.log('✅ Authentication successful:', user);
-          */
+
+          // 💾 Сохранить данные для отображения на странице
+          if (typeof window !== 'undefined') {
+            (window as any).debugAuth = {
+              status: 'AUTH_SUCCESS',
+              user: user,
+              initData: initDataRaw,
+              timestamp: new Date().toISOString(),
+              storeState: 'AUTHENTICATED_VIA_BACKEND'
+            };
+          }
         } catch (error: any) {
-          console.error('❌ Authentication failed:', error);
+          console.error('❌ Ошибка аутентификации:', error);
           
-          // Детальная обработка разных типов ошибок
+          // Детальный анализ ошибки
           if (error.response) {
-            // Ошибка от сервера с статусом
+            console.error('📊 Детали ошибки:', {
+              status: error.response.status,
+              data: error.response.data,
+              headers: error.response.headers
+            });
+            
             const status = error.response.status;
             const message = error.response.data?.message || error.response.statusText;
             
@@ -149,22 +125,9 @@ export const useAuthStore = create<AuthState>()(
             set({ error: `Authentication failed: ${error.message}` });
           }
           
-          set({ isLoading: false, isAuthenticated: false });
-        }
-      },
-
-      /**
-       * Выполняет тестовую аутентификацию (без использования Telegram данных)
-       */
-      testAuth: async () => {
-        console.log('🛜 testAuth called');
-        set({ isLoading: true, error: null });
-        
-        try {
-          // 🔴 ВРЕМЕННО: Закомментировать вызов API
-          console.log('🔧 ВРЕМЕННО: Тестовая аутентификация отключена, устанавливаем тестового пользователя');
-          
-          // 🟢 ВРЕМЕННО: Установить тестового пользователя
+          // 🔴 ВРЕМЕННО: все равно устанавливаем тестового пользователя
+          // чтобы остановить перезагрузку
+          console.log('🔧 ВРЕМЕННО: Устанавливаем тестового пользователя из-за ошибки');
           const testUser = {
             id: '303987836',
             firstName: 'Егор',
@@ -183,26 +146,39 @@ export const useAuthStore = create<AuthState>()(
             user: testUser, 
             token: testToken,
             isAuthenticated: true, 
-            isLoading: false,
-            error: null
+            isLoading: false
           });
           
-          console.log('✅ ВРЕМЕННО: Установлен тестовый пользователь через testAuth:', testUser);
+          console.log('✅ ВРЕМЕННО: Установлен тестовый пользователь из-за ошибки:', testUser);
 
           // 💾 Сохранить данные для отображения на странице
           if (typeof window !== 'undefined') {
             (window as any).debugAuth = {
-              status: 'TEST_AUTH_DISABLED_TEMPORARILY',
+              status: 'AUTH_FAILED_BUT_TEST_USER_SET',
               user: testUser,
+              initData: initDataRaw,
               timestamp: new Date().toISOString(),
-              storeState: 'TEST_USER_SET_VIA_TEST_AUTH'
+              error: error.message,
+              storeState: 'TEST_USER_SET_DUE_TO_ERROR'
             };
           }
+        }
+      },
 
-          // 🔴 ВРЕМЕННО ЗАКОММЕНТИРОВАН ВЫЗОВ API
-          /*
+      /**
+       * Выполняет тестовую аутентификацию (без использования Telegram данных)
+       */
+      testAuth: async () => {
+        console.log('🛜 testAuth called');
+        set({ isLoading: true, error: null });
+        
+        try {
+          // 🟢 РАСКОММЕНТИРОВАН нормальный вызов API
+          console.log('🔐 Отправляем тестовую аутентификацию на бэкенд...');
           const response = await apiClient.post('/auth/test');
           const { user, token } = response.data;
+          
+          console.log('✅ Ответ от бэкенда (test):', response);
           
           // Сохраняем токен
           if (typeof window !== 'undefined') {
@@ -218,11 +194,27 @@ export const useAuthStore = create<AuthState>()(
           });
           
           console.log('✅ Test authentication successful:', user);
-          */
+
+          // 💾 Сохранить данные для отображения на странице
+          if (typeof window !== 'undefined') {
+            (window as any).debugAuth = {
+              status: 'TEST_AUTH_SUCCESS',
+              user: user,
+              timestamp: new Date().toISOString(),
+              storeState: 'AUTHENTICATED_VIA_TEST'
+            };
+          }
         } catch (error: any) {
-          console.error('❌ Test authentication failed:', error);
+          console.error('❌ Ошибка тестовой аутентификации:', error);
           
+          // Детальный анализ ошибки
           if (error.response) {
+            console.error('📊 Детали ошибки (test):', {
+              status: error.response.status,
+              data: error.response.data,
+              headers: error.response.headers
+            });
+            
             const status = error.response.status;
             const message = error.response.data?.message || error.response.statusText;
             set({ error: `Test authentication failed: ${status} - ${message}` });
@@ -230,7 +222,42 @@ export const useAuthStore = create<AuthState>()(
             set({ error: `Test authentication failed: ${error.message}` });
           }
           
-          set({ isLoading: false });
+          // 🔴 ВРЕМЕННО: все равно устанавливаем тестового пользователя
+          console.log('🔧 ВРЕМЕННО: Устанавливаем тестового пользователя из-за ошибки тестовой аутентификации');
+          const testUser = {
+            id: '303987836',
+            firstName: 'Егор',
+            lastName: 'Гуревич',
+            username: 'gurevichegor'
+          };
+          
+          const testToken = 'test-token-' + Date.now();
+          
+          // Сохраняем токен
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('auth_token', testToken);
+          }
+          
+          set({ 
+            user: testUser, 
+            token: testToken,
+            isAuthenticated: true, 
+            isLoading: false
+          });
+          
+          console.log('✅ ВРЕМЕННО: Установлен тестовый пользователь из-за ошибки тестовой аутентификации:', testUser);
+
+          // 💾 Сохранить данные для отображения на странице
+          if (typeof window !== 'undefined') {
+            (window as any).debugAuth = {
+              status: 'TEST_AUTH_FAILED_BUT_TEST_USER_SET',
+              user: testUser,
+              timestamp: new Date().toISOString(),
+              error: error.message,
+              storeState: 'TEST_USER_SET_DUE_TO_TEST_ERROR'
+            };
+          }
+          
           throw error;
         }
       },

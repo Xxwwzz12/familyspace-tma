@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
 import Layout from './components/Layout';
@@ -15,6 +15,9 @@ function App() {
   const [isInitialized, setIsInitialized] = useState(false);
   const { isTelegramEnv, isSDKReady, initData } = useTelegram();
   const { initializeAuth, isAuthenticated, isLoading } = useAuthStore();
+  
+  // 🔧 ДОБАВЛЕН: useRef для предотвращения двойной инициализации
+  const initializedRef = useRef(false);
 
   // 🔧 ДОБАВЛЕН: useEffect для инициализации Eruda
   useEffect(() => {
@@ -87,8 +90,17 @@ function App() {
     }
   }, []);
 
-  // 🔄 ОБНОВЛЕН: useEffect для инициализации приложения с улучшенной диагностикой
+  // 🔄 ОБНОВЛЕН: useEffect для инициализации приложения с защитой от двойного вызова
   useEffect(() => {
+    // Предотвращаем двойную инициализацию
+    if (initializedRef.current) {
+      console.log('🔄 App already initialized, skipping...');
+      return;
+    }
+    
+    initializedRef.current = true;
+    console.log('🏗️ App initialization started (FIRST TIME)');
+
     const initializeApp = async () => {
       // Ждем загрузки SDK Telegram
       if (!isSDKReady) {
@@ -97,7 +109,6 @@ function App() {
       }
 
       try {
-        console.log('🏗️ App initialization started');
         console.log('📱 Telegram env check:', {
           hasTelegram: typeof window.Telegram !== 'undefined',
           hasWebApp: typeof window.Telegram?.WebApp !== 'undefined',
