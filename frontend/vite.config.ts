@@ -3,28 +3,13 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 
 // -----------------------------
-// Закомментированные плагины
-// -----------------------------
-/*
-// HTML Debug Plugin (закомментирован)
-function htmlDebugPlugin(): Plugin {
-  // ... весь код плагина
-}
-
-// Custom HTML Inject Plugin (закомментирован)  
-function customHtmlInjectPlugin(): Plugin {
-  // ... весь код плагина
-}
-*/
-
-// -----------------------------
 // Export Vite config
 // -----------------------------
 export default defineConfig({
+  base: './', // Базовый путь для ресурсов
+  
   plugins: [
     react(),
-    // htmlDebugPlugin(), // Закомментировано
-    // customHtmlInjectPlugin(), // Закомментировано
   ],
 
   resolve: {
