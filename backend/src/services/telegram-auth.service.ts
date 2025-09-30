@@ -22,6 +22,9 @@ const FALLBACK_USER: TelegramUser = {
 // ВРЕМЕННО: принудительно включаем отладку хэша
 const DEBUG_SKIP_HASH_CHECK = process.env.DEBUG_SKIP_HASH_CHECK === 'true' || true; // принудительно true
 
+// 🔧 ВРЕМЕННОЕ РЕШЕНИЕ ДЛЯ ТЕСТИРОВАНИЯ - отключение проверки времени
+const DEBUG_SKIP_TIME_CHECK = true; // Добавьте эту строку
+
 // Проверка режима отладки хэша
 const isHashCheckDisabled = (): boolean => {
   return DEBUG_SKIP_HASH_CHECK;
@@ -48,6 +51,12 @@ function validateEnvironmentVariables(debug = false): string {
   // Предупреждение о режиме отладки
   if (isHashCheckDisabled()) {
     console.warn('⚠️  DEBUG_SKIP_HASH_CHECK is enabled - HASH VERIFICATION IS DISABLED');
+    console.warn('⚠️  This should only be used for temporary debugging purposes');
+  }
+  
+  // Предупреждение о отключении проверки времени
+  if (DEBUG_SKIP_TIME_CHECK) {
+    console.warn('⚠️  DEBUG_SKIP_TIME_CHECK is enabled - TIME VERIFICATION IS DISABLED');
     console.warn('⚠️  This should only be used for temporary debugging purposes');
   }
   
@@ -167,6 +176,9 @@ export async function validateInitData(initData: string, options: ValidationOpti
     if (hashCheckDisabled) {
       console.warn('🚨 HASH VERIFICATION DISABLED - DEBUG_SKIP_HASH_CHECK=true');
     }
+    if (DEBUG_SKIP_TIME_CHECK) {
+      console.warn('🚨 TIME VERIFICATION DISABLED - DEBUG_SKIP_TIME_CHECK=true');
+    }
   }
 
   // dev fallback
@@ -193,15 +205,36 @@ export async function validateInitData(initData: string, options: ValidationOpti
   const authDate = parseInt(params.auth_date, 10);
   if (isNaN(authDate)) throw new Error('Invalid auth_date');
 
-  if (!disableTimeCheck) {
+  // 🔧 ИСПРАВЛЕННАЯ ПРОВЕРКА ВРЕМЕНИ С ВОЗМОЖНОСТЬЮ ОТКЛЮЧЕНИЯ
+  const MAX_AUTH_AGE = 30 * 60; // 30 минут в секундах
+  
+  if (!DEBUG_SKIP_TIME_CHECK && !disableTimeCheck) {
     const now = Math.floor(Date.now() / 1000);
     const diff = now - authDate;
+    const timeDiffMinutes = Math.floor(diff / 60);
+    
     if (debug || hashCheckDisabled) {
-      console.log('[TelegramAuth] auth_date:', new Date(authDate * 1000).toISOString(), 'now:', new Date(now * 1000).toISOString(), 'diffSec=', diff);
+      console.log('[TelegramAuth] auth_date:', new Date(authDate * 1000).toISOString());
+      console.log('[TelegramAuth] current time:', new Date(now * 1000).toISOString());
+      console.log('[TelegramAuth] time difference:', timeDiffMinutes, 'minutes');
+      console.log('[TelegramAuth] maximum allowed age:', 30, 'minutes');
     }
-    if (diff > 30 * 60) throw new Error('Auth date too old');
-  } else if (debug || hashCheckDisabled) {
-    console.log('[TelegramAuth] time check disabled');
+    
+    // 🔧 ВРЕМЕННОЕ РЕШЕНИЕ ДЛЯ ТЕСТИРОВАНИЯ
+    if (!DEBUG_SKIP_TIME_CHECK && diff > MAX_AUTH_AGE) {
+      throw new Error(`Auth date too old (${timeDiffMinutes} minutes). Maximum allowed: 30 minutes`);
+    }
+  } else {
+    const now = Math.floor(Date.now() / 1000);
+    const diff = now - authDate;
+    const timeDiffMinutes = Math.floor(diff / 60);
+    
+    if (debug || hashCheckDisabled) {
+      console.log('[TelegramAuth] auth_date:', new Date(authDate * 1000).toISOString());
+      console.log('[TelegramAuth] current time:', new Date(now * 1000).toISOString());
+      console.log('[TelegramAuth] time difference:', timeDiffMinutes, 'minutes');
+      console.log('[TelegramAuth] ⚠️  TIME CHECK DISABLED');
+    }
   }
 
   // 🔧 ИСПРАВЛЕННЫЙ АЛГОРИТМ ПРОВЕРКИ ХЭША
