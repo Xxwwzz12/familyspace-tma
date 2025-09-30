@@ -76,18 +76,24 @@ export async function validateInitData(initData: string, options: ValidationOpti
       console.log('🔐 Validating initData via @telegram-auth/server...');
     }
 
-    // 🔧 ПРЕОБРАЗУЕМ QUERY STRING В ПОЛНЫЙ URL
-    const fakeUrl = `https://example.com?${initData}`;
-    
-    if (debug) {
-      console.log('📋 Fake URL for validation:', fakeUrl);
-    }
-
     // Создаем валидатор
     const validator = new AuthDataValidator({ botToken: BOT_TOKEN });
     
-    // Передаем полный URL вместо query string
-    const user = await validator.validate(new URL(fakeUrl));
+    // Преобразуем query string в Map<string, string>
+    const params = new URLSearchParams(initData);
+    const authDataMap = new Map<string, string>();
+    
+    // Копируем все параметры в Map
+    for (const [key, value] of params.entries()) {
+      authDataMap.set(key, value);
+    }
+    
+    if (debug) {
+      console.log('📋 AuthDataMap for validation:', Object.fromEntries(authDataMap));
+    }
+
+    // Передаем Map в валидатор
+    const user = await validator.validate(authDataMap as any);
 
     if (debug) {
       console.log('✅ Validation result from library:', user);
@@ -107,6 +113,14 @@ export async function validateInitData(initData: string, options: ValidationOpti
       console.log('  - BOT_TOKEN length:', BOT_TOKEN.length);
       console.log('  - initData length:', initData.length);
       console.log('  - initData sample:', initData.substring(0, 200) + '...');
+      
+      // Показываем параметры для отладки
+      try {
+        const params = new URLSearchParams(initData);
+        console.log('  - Parameters found:', Array.from(params.keys()));
+      } catch (e) {
+        console.log('  - Cannot parse initData parameters');
+      }
     }
     
     throw new Error(`Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
