@@ -1,164 +1,136 @@
-import { useEffect, useState, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
 import Layout from './components/Layout';
 import OnboardingPage from './pages/OnboardingPage';
 import HomePage from './pages/HomePage';
 import ErrorBoundary from './components/ErrorBoundary';
-import useTelegram from './hooks/useTelegram';
 import { useAuthStore } from './stores/auth.store';
+import { Environment } from './utils/environment';
 import DevelopmentBanner from './components/DevelopmentBanner';
 import DebugPanel from './components/DebugPanel';
 import DebugInfo from './components/DebugInfo';
+import BrowserAuthScreen from './components/BrowserAuthScreen';
 
 function App() {
-  const [isInitialized, setIsInitialized] = useState(false);
-  const { isTelegramEnv, isSDKReady, initData } = useTelegram();
-  const { initializeAuth, isAuthenticated, isLoading } = useAuthStore();
-  
-  // 🔒 Защита от повторной инициализации
-  const initializedRef = useRef(false);
+  const { 
+    initializeAuth, 
+    isInitialized, 
+    isLoading, 
+    isAuthenticated,
+    authMethod,
+    error
+  } = useAuthStore();
 
-  // 🔧 Инициализация Eruda только в debug режиме
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const isDebugMode = urlParams.get('debug') === 'true';
+    console.log('🏗️ App component mounted, initializing auth...');
+    console.log('🌍 Environment:', Environment.getEnvironment());
     
-    if (isDebugMode) {
-      console.log('🔧 Debug mode activated, initializing Eruda...');
-      
-      import('eruda')
-        .then((erudaModule) => {
-          const eruda = erudaModule.default;
-          eruda.init();
-          console.log('✅ Eruda debug console initialized successfully');
-        })
-        .catch((error) => {
-          console.error('❌ Failed to initialize Eruda:', error);
-        });
-    }
-  }, []);
+    initializeAuth();
+  }, [initializeAuth]);
 
-  // 🔧 ЕДИНСТВЕННЫЙ эффект для инициализации приложения
-  useEffect(() => {
-    const initializeApp = async () => {
-      // 🔒 Защита от повторной инициализации
-      if (initializedRef.current) {
-        console.log('🔄 App already initialized, skipping...');
-        return;
-      }
-
-      console.log('🚀 Starting app initialization...');
-      
-      try {
-        // Диагностика Telegram WebApp
-        const webApp = window.Telegram?.WebApp;
-        console.log('📱 Telegram WebApp check:', {
-          hasTelegram: typeof window.Telegram !== 'undefined',
-          hasWebApp: typeof webApp !== 'undefined',
-          hasInitData: !!webApp?.initData,
-          isTelegramEnv: isTelegramEnv,
-          isSDKReady: isSDKReady
-        });
-
-        // Инициализация Telegram WebApp
-        if (webApp) {
-          try {
-            webApp.ready();
-            console.log('✅ Telegram WebApp marked as ready');
-          } catch (readyError) {
-            console.warn('⚠️ Telegram WebApp.ready() failed:', readyError);
-          }
-        }
-
-        // Аутентификация
-        if (isTelegramEnv && initData) {
-          console.log('🔐 Attempting Telegram authentication...');
-          console.log('📋 InitData content:', {
-            length: initData?.length || 0,
-            first100Chars: initData?.substring(0, 100) + '...'
-          });
-          
-          await initializeAuth(initData);
-          console.log('✅ Authentication completed');
-        } else {
-          console.log('ℹ️ No Telegram WebApp environment, using standalone mode');
-          await initializeAuth(null);
-          console.log('✅ Standalone mode initialized');
-        }
-
-        // ✅ КРИТИЧЕСКИ ВАЖНО: правильная последовательность установки флагов
-        initializedRef.current = true;
-        setIsInitialized(true);
-        
-        console.log('🎉 App initialization completed successfully');
-        console.log('🔐 Final auth status:', { isAuthenticated, isLoading });
-
-      } catch (error) {
-        console.error('❌ App initialization error:', error);
-        console.error('💥 Error details:', {
-          message: error.message,
-          stack: error.stack,
-          name: error.name
-        });
-        
-        // 🔒 Даже при ошибке снимаем блокировку инициализации
-        initializedRef.current = true;
-        setIsInitialized(true);
-      }
-    };
-
-    // Запускаем инициализацию только когда SDK готов
-    if (isSDKReady) {
-      initializeApp();
-    } else {
-      console.log('⏳ Waiting for Telegram SDK to be ready...');
-    }
-  }, [isSDKReady, isTelegramEnv, initData, initializeAuth]); // Правильные зависимости
-
-  // Убраны дублирующие useEffect для диагностики Telegram WebApp
-
-  // 🔧 Упрощенное условие показа loading
+  // Пока приложение инициализируется, показываем загрузку
   if (!isInitialized || isLoading) {
-    console.log('⏳ Showing loading state', { isInitialized, isLoading });
+    console.log('⏳ Showing loading state', { isInitialized, isLoading, error });
     return (
-      <div style={{ 
+      <div className="app-loading" style={{ 
         display: 'flex', 
+        flexDirection: 'column',
         justifyContent: 'center', 
         alignItems: 'center', 
         height: '100vh',
-        fontSize: '18px'
+        fontSize: '18px',
+        textAlign: 'center',
+        padding: '20px'
       }}>
-        Loading...
+        <div>Загрузка FamilySpace...</div>
+        <div style={{ fontSize: '14px', marginTop: '10px', color: '#666' }}>
+          Окружение: {Environment.getEnvironment()}
+        </div>
+        {error && (
+          <div style={{ 
+            marginTop: '15px', 
+            padding: '10px', 
+            background: '#ffe6e6', 
+            color: '#d00',
+            borderRadius: '5px',
+            fontSize: '14px'
+          }}>
+            Ошибка: {error}
+          </div>
+        )}
       </div>
     );
   }
 
-  console.log('🎯 Rendering main content', { 
+  // Если инициализация завершена, но пользователь не аутентифицирован
+  if (!isAuthenticated) {
+    console.log('🔐 User not authenticated, showing auth screen', { 
+      environment: Environment.getEnvironment(),
+      authMethod 
+    });
+    
+    // В зависимости от окружения показываем соответствующий экран аутентификации
+    if (Environment.isTelegram()) {
+      // В TMA аутентификация должна быть автоматической, поэтому это ошибка
+      return (
+        <div className="app-error" style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '100vh',
+          padding: '20px',
+          textAlign: 'center'
+        }}>
+          <h1 style={{ color: '#d00', marginBottom: '20px' }}>
+            Ошибка аутентификации в Telegram
+          </h1>
+          <p style={{ marginBottom: '20px', fontSize: '16px' }}>
+            Не удалось войти через Telegram Mini App. Пожалуйста, попробуйте перезагрузить приложение.
+          </p>
+          {error && (
+            <div style={{ 
+              padding: '10px', 
+              background: '#ffe6e6', 
+              color: '#d00',
+              borderRadius: '5px',
+              fontSize: '14px',
+              maxWidth: '500px'
+            }}>
+              Детали: {error}
+            </div>
+          )}
+        </div>
+      );
+    } else {
+      // В браузере показываем экран аутентификации через Telegram Widget
+      return <BrowserAuthScreen />;
+    }
+  }
+
+  // Если пользователь аутентифицирован, показываем основное приложение
+  console.log('🎯 Rendering main app', { 
+    authMethod, 
     isAuthenticated, 
-    isInitialized, 
-    isLoading 
+    isInitialized 
   });
 
   return (
     <ErrorBoundary>
-      <Layout>
-        <DevelopmentBanner />
-        <Router>
-          <Routes>
-            <Route path="/" element={
-              isAuthenticated ? <HomePage /> : <OnboardingPage />
-            } />
-            <Route path="/onboarding" element={<OnboardingPage />} />
-          </Routes>
-        </Router>
-        
-        {/* 🔍 КОМПОНЕНТ ДИАГНОСТИКИ */}
-        <DebugInfo />
-        
-        {/* Условный рендеринг DebugPanel только в development режиме */}
-        {process.env.NODE_ENV === 'development' && <DebugPanel />}
-      </Layout>
+      <div className="app">
+        <DebugPanel />
+        <Layout>
+          <DevelopmentBanner />
+          <Router>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/onboarding" element={<OnboardingPage />} />
+            </Routes>
+          </Router>
+          <DebugInfo />
+        </Layout>
+      </div>
     </ErrorBoundary>
   );
 }

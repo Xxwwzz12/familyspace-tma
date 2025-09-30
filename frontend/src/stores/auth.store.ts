@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { apiClient } from '../utils/apiClient';
+import { authService, AuthResult } from '../services/auth.service';
+import { Environment } from '../utils/environment';
 
 interface User {
   id: string;
@@ -9,323 +10,196 @@ interface User {
   username: string | null;
 }
 
-interface AuthResponse {
-  user: User;
-  token: string;
-}
-
 interface AuthState {
-  token: string | null;
   user: User | null;
+  token: string | null;
   isAuthenticated: boolean;
-  isLoading: boolean;
   isInitialized: boolean;
+  isLoading: boolean;
+  authMethod: 'telegram' | 'widget' | 'none';
   error: string | null;
-  initializeAuth: (initDataRaw: string | null) => Promise<void>;
-  login: (user: User, token: string) => void;
+  
+  // Обновленные методы
+  initializeAuth: () => Promise<void>;
+  loginWithTelegramWidget: (authData: any) => Promise<AuthResult>;
   logout: () => void;
-  testAuth: () => Promise<void>;
-  setToken: (token: string | null) => void;
-  setUser: (user: User | null) => void;
   clearError: () => void;
-  setInitialized: (initialized: boolean) => void;
+  
+  // Сеттеры для обратной совместимости
+  setUser: (user: User | null) => void;
+  setToken: (token: string | null) => void;
+  setIsAuthenticated: (isAuthenticated: boolean) => void;
+  setIsInitialized: (isInitialized: boolean) => void;
+  setIsLoading: (isLoading: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
-      token: null,
+    (set, get) => ({
       user: null,
+      token: null,
       isAuthenticated: false,
-      isLoading: true,
       isInitialized: false,
+      isLoading: false,
+      authMethod: 'none',
       error: null,
 
-      /**
-       * Инициализирует аутентификацию пользователя
-       * @param initDataRaw - Сырые данные инициализации Telegram Web App или null для тестовой аутентификации
-       */
-      initializeAuth: async (initDataRaw: string | null) => {
-        console.log('🔄 initializeAuth called with initDataRaw:', initDataRaw);
+      // 🔄 ПОЛНОСТЬЮ ПЕРЕПИСАННЫЙ МЕТОД ИНИЦИАЛИЗАЦИИ
+      initializeAuth: async () => {
+        console.log('🔄 Starting auth initialization...');
         set({ isLoading: true, error: null });
         
         try {
-          let response;
+          // Используем универсальный сервис аутентификации
+          const result = await authService.authenticate();
           
-          if (initDataRaw) {
-            // 🟢 НОРМАЛЬНЫЙ ВЫЗОВ API - раскомментировать
-            console.log('🔐 Отправляем аутентификацию на бэкенд...');
+          if (result.success) {
+            console.log('✅ Authentication successful via:', Environment.getEnvironment());
             
-            response = await apiClient.post<AuthResponse>('/auth/init', { 
-              initData: initDataRaw 
-            });
-            
-            console.log('✅ Ответ от бэкенда:', response);
-          } else {
-            // Тестовая аутентификация (fallback)
-            console.log('🧪 Using test authentication (initDataRaw is null)');
-            response = await apiClient.post<AuthResponse>('/auth/test');
-          }
-          
-          // Использовать реальные данные из ответа
-          const { user, token } = response.data;
-          
-          // Сохраняем токен для будущих авторизованных запросов
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('jwt_token', token);
-          }
-          
-          // Устанавливаем токен в apiClient для будущих запросов
-          apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          
-          set({ 
-            user, 
-            token,
-            isAuthenticated: true, 
-            isLoading: false,
-            isInitialized: true,
-            error: null
-          });
-          
-          console.log('✅ Аутентификация успешна, пользователь:', user);
-
-          // 💾 Сохранить данные для отображения на странице
-          if (typeof window !== 'undefined') {
-            (window as any).debugAuth = {
-              status: 'AUTH_SUCCESS',
-              user: user,
-              initData: initDataRaw,
-              timestamp: new Date().toISOString(),
-              storeState: 'AUTHENTICATED_VIA_BACKEND'
-            };
-          }
-        } catch (error: any) {
-          console.error('❌ Ошибка аутентификации:', error);
-          
-          // Детальный анализ ошибки
-          if (error.response) {
-            console.error('📊 Детали ошибки:', {
-              status: error.response.status,
-              data: error.response.data,
-              headers: error.response.headers
-            });
-            
-            // Обработка специфических ошибок
-            if (error.response.status === 401) {
-              console.error('🔐 Ошибка авторизации: неверная подпись Telegram');
-              set({ error: 'Authentication failed: Invalid Telegram signature' });
-            } else if (error.response.status === 500) {
-              console.error('⚙️ Ошибка сервера при аутентификации');
-              set({ error: 'Authentication failed: Server error' });
-            } else {
-              set({ error: `Authentication failed: ${error.response.status} - ${error.response.data?.message || error.response.statusText}` });
+            // Сохраняем токен для будущих запросов
+            if (result.token) {
+              authService.setAuthToken(result.token);
             }
-          } else if (error.request) {
-            // Ошибка сети (нет ответа от сервера)
-            console.log('🌐 Network error: No response from server');
-            set({ error: 'Authentication failed: Network error - please check your connection' });
+            
+            // Определяем метод аутентификации
+            const authMethod = Environment.isTelegram() ? 'telegram' : 'widget';
+            
+            set({
+              user: result.user,
+              token: result.token,
+              isAuthenticated: true,
+              authMethod,
+              error: null,
+              isLoading: false,
+              isInitialized: true
+            });
+            
+            console.log(`🔐 Authenticated via ${authMethod}, user:`, result.user);
           } else {
-            // Другие ошибки
-            console.log('❓ Other error:', error.message);
-            set({ error: `Authentication failed: ${error.message}` });
+            console.log('⚠️ Authentication required:', result.error);
+            
+            set({
+              error: result.error || 'Authentication required',
+              authMethod: 'none',
+              isLoading: false,
+              isInitialized: true
+            });
           }
+        } catch (error: any) {
+          console.error('❌ Auth initialization error:', error);
           
-          // Завершаем инициализацию даже при ошибке
-          set({ 
-            isLoading: false, 
-            isInitialized: true,
-            isAuthenticated: false 
+          set({
+            error: error.message || 'Initialization failed',
+            authMethod: 'none',
+            isLoading: false,
+            isInitialized: true
           });
-
-          // 💾 Сохранить данные для отображения на странице
-          if (typeof window !== 'undefined') {
-            (window as any).debugAuth = {
-              status: 'AUTH_FAILED',
-              initData: initDataRaw,
-              timestamp: new Date().toISOString(),
-              error: error.message,
-              storeState: 'AUTH_FAILED_NO_TEST_USER'
-            };
-          }
         }
       },
 
-      /**
-       * Выполняет тестовую аутентификацию (без использования Telegram данных)
-       */
-      testAuth: async () => {
-        console.log('🛜 testAuth called');
+      // 🆕 МЕТОД ДЛЯ TELEGRAM WIDGET АУТЕНТИФИКАЦИИ
+      loginWithTelegramWidget: async (authData: any): Promise<AuthResult> => {
+        console.log('🌐 Starting Telegram Widget authentication...');
         set({ isLoading: true, error: null });
         
         try {
-          // 🟢 НОРМАЛЬНЫЙ ВЫЗОВ API - раскомментировать
-          console.log('🔐 Отправляем тестовую аутентификацию на бэкенд...');
-          const response = await apiClient.post<AuthResponse>('/auth/test');
+          const result = await authService.authenticateTelegramWidget(authData);
           
-          console.log('✅ Ответ от бэкенда (test):', response);
-          
-          // Использовать реальные данные из ответа
-          const { user, token } = response.data;
-          
-          // Сохраняем токен для будущих авторизованных запросов
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('jwt_token', token);
-          }
-          
-          // Устанавливаем токен в apiClient для будущих запросов
-          apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          
-          set({ 
-            user, 
-            token,
-            isAuthenticated: true, 
-            isLoading: false,
-            isInitialized: true,
-            error: null
-          });
-          
-          console.log('✅ Тестовая аутентификация успешна, пользователь:', user);
-
-          // 💾 Сохранить данные для отображения на странице
-          if (typeof window !== 'undefined') {
-            (window as any).debugAuth = {
-              status: 'TEST_AUTH_SUCCESS',
-              user: user,
-              timestamp: new Date().toISOString(),
-              storeState: 'AUTHENTICATED_VIA_TEST'
-            };
-          }
-        } catch (error: any) {
-          console.error('❌ Ошибка тестовой аутентификации:', error);
-          
-          // Детальный анализ ошибки
-          if (error.response) {
-            console.error('📊 Детали ошибки (test):', {
-              status: error.response.status,
-              data: error.response.data,
-              headers: error.response.headers
+          if (result.success) {
+            // Сохраняем токен и пользователя
+            if (result.token) {
+              authService.setAuthToken(result.token);
+            }
+            
+            set({
+              user: result.user,
+              token: result.token,
+              isAuthenticated: true,
+              authMethod: 'widget',
+              error: null,
+              isLoading: false
             });
             
-            const status = error.response.status;
-            const message = error.response.data?.message || error.response.statusText;
-            set({ error: `Test authentication failed: ${status} - ${message}` });
+            console.log('✅ Telegram Widget authentication successful');
           } else {
-            set({ error: `Test authentication failed: ${error.message}` });
+            set({
+              error: result.error || 'Widget authentication failed',
+              isLoading: false
+            });
           }
           
-          // Завершаем инициализацию даже при ошибке
-          set({ 
-            isLoading: false, 
-            isInitialized: true,
-            isAuthenticated: false 
+          return result;
+        } catch (error: any) {
+          console.error('❌ Telegram Widget authentication error:', error);
+          
+          const result: AuthResult = {
+            success: false,
+            error: error.message || 'Widget authentication failed'
+          };
+          
+          set({
+            error: result.error,
+            isLoading: false
           });
-
-          // 💾 Сохранить данные для отображения на странице
-          if (typeof window !== 'undefined') {
-            (window as any).debugAuth = {
-              status: 'TEST_AUTH_FAILED',
-              timestamp: new Date().toISOString(),
-              error: error.message,
-              storeState: 'TEST_AUTH_FAILED_NO_TEST_USER'
-            };
-          }
           
-          throw error;
+          return result;
         }
       },
 
-      /**
-       * Вход пользователя в систему
-       * @param user - Данные пользователя
-       * @param token - JWT токен аутентификации
-       */
-      login: (user: User, token: string) => {
-        console.log('🔐 login action called with user:', user);
-        
-        // Сохраняем токен для будущих авторизованных запросов
-        if (typeof window !== 'undefined') {
-          localStorage.setItem('jwt_token', token);
-        }
-        
-        // Устанавливаем токен в apiClient для будущих запросов
-        apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        
-        set({ 
-          user, 
-          token,
-          isAuthenticated: true,
-          isLoading: false,
-          isInitialized: true,
-          error: null
-        });
-      },
-
-      /**
-       * Выход пользователя из системы
-       */
+      // 🆕 МЕТОД ВЫХОДА
       logout: () => {
-        console.log('🚪 logout action called');
+        console.log('🚪 Logging out user...');
         
-        // Удаляем токен
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('jwt_token');
-        }
+        // Вызываем сервис для очистки токенов
+        authService.logout();
         
-        // Убираем токен из apiClient
-        delete apiClient.defaults.headers.common['Authorization'];
-        
-        set({ 
-          user: null, 
+        // Сбрасываем состояние хранилища
+        set({
+          user: null,
           token: null,
           isAuthenticated: false,
-          isLoading: false,
-          isInitialized: true,
-          error: null
+          authMethod: 'none',
+          error: null,
+          isLoading: false
         });
-      },
-
-      /**
-       * Устанавливает токен аутентификации
-       * @param token - JWT токен или null для очистки
-       */
-      setToken: (token: string | null) => {
-        console.log('🔑 setToken called with:', token);
         
-        if (token && typeof window !== 'undefined') {
-          localStorage.setItem('jwt_token', token);
-          apiClient.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-        } else if (typeof window !== 'undefined') {
-          localStorage.removeItem('jwt_token');
-          delete apiClient.defaults.headers.common['Authorization'];
-        }
-        
-        set({ token, error: null });
+        console.log('✅ User logged out');
       },
 
-      /**
-       * Устанавливает данные пользователя
-       * @param user - Данные пользователя или null для очистки
-       */
-      setUser: (user: User | null) => {
-        console.log('👤 setUser called with:', user);
-        set({ user, error: null });
-      },
-
-      /**
-       * Очищает ошибку аутентификации
-       */
+      // 🆕 МЕТОД ДЛЯ ОЧИСТКИ ОШИБОК
       clearError: () => {
-        console.log('🧹 Clearing error');
         set({ error: null });
       },
 
-      /**
-       * Устанавливает флаг инициализации
-       * @param initialized - true если инициализация завершена
-       */
-      setInitialized: (initialized: boolean) => {
-        console.log('🏁 setInitialized called with:', initialized);
-        set({ isInitialized: initialized });
+      // 🔄 СЕТТЕРЫ ДЛЯ ОБРАТНОЙ СОВМЕСТИМОСТИ
+      setUser: (user: User | null) => {
+        console.log('👤 setUser called with:', user);
+        set({ user });
+      },
+
+      setToken: (token: string | null) => {
+        console.log('🔑 setToken called with:', token);
+        
+        if (token) {
+          authService.setAuthToken(token);
+        }
+        
+        set({ token });
+      },
+
+      setIsAuthenticated: (isAuthenticated: boolean) => {
+        console.log('🔐 setIsAuthenticated called with:', isAuthenticated);
+        set({ isAuthenticated });
+      },
+
+      setIsInitialized: (isInitialized: boolean) => {
+        console.log('🏁 setIsInitialized called with:', isInitialized);
+        set({ isInitialized });
+      },
+
+      setIsLoading: (isLoading: boolean) => {
+        console.log('⏳ setIsLoading called with:', isLoading);
+        set({ isLoading });
       },
     }),
     {
@@ -333,20 +207,26 @@ export const useAuthStore = create<AuthState>()(
       onRehydrateStorage: () => (state) => {
         console.log('💾 Storage rehydrated', state);
         
-        // При восстановлении состояния устанавливаем токен в apiClient, если он есть
-        if (state && state.token && typeof window !== 'undefined') {
-          apiClient.defaults.headers.common['Authorization'] = `Bearer ${state.token}`;
+        // При восстановлении состояния устанавливаем токен в сервис, если он есть
+        if (state && state.token) {
+          authService.setAuthToken(state.token);
         }
         
         if (state && typeof state === 'object') {
-          return { ...state, isLoading: false, error: null };
+          return { 
+            ...state, 
+            isLoading: false,
+            error: null
+          };
         }
         return state;
       },
       partialize: (state) => ({
-        token: state.token,
         user: state.user,
-        isInitialized: state.isInitialized
+        token: state.token,
+        isAuthenticated: state.isAuthenticated,
+        isInitialized: state.isInitialized,
+        authMethod: state.authMethod
       }),
       merge: (persistedState, currentState) => {
         if (persistedState && typeof persistedState === 'object') {
@@ -354,13 +234,14 @@ export const useAuthStore = create<AuthState>()(
             ...currentState,
             ...persistedState,
             initializeAuth: currentState.initializeAuth,
-            login: currentState.login,
+            loginWithTelegramWidget: currentState.loginWithTelegramWidget,
             logout: currentState.logout,
-            testAuth: currentState.testAuth,
-            setToken: currentState.setToken,
-            setUser: currentState.setUser,
             clearError: currentState.clearError,
-            setInitialized: currentState.setInitialized
+            setUser: currentState.setUser,
+            setToken: currentState.setToken,
+            setIsAuthenticated: currentState.setIsAuthenticated,
+            setIsInitialized: currentState.setIsInitialized,
+            setIsLoading: currentState.setIsLoading
           };
         }
         return currentState;

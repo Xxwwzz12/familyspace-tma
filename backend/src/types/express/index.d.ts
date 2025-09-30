@@ -1,4 +1,5 @@
 import { User, Family, FamilyMembers } from '@prisma/client';
+import { TelegramWidgetData } from '../../types/telegram-widget';
 
 export interface AuthenticatedUser extends User {
   families?: Array<FamilyMembers & {
@@ -9,10 +10,10 @@ export interface AuthenticatedUser extends User {
 declare global {
   namespace Express {
     export interface Request {
+      telegramWidgetData?: TelegramWidgetData;
       user?: AuthenticatedUser;
     }
     
-    // Явно экспортируем интерфейс AuthRequest
     export interface AuthRequest extends Request {
       user: AuthenticatedUser;
     }

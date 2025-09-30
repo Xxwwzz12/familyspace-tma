@@ -191,3 +191,121 @@ export const testHashValidation = async (req: Request, res: Response): Promise<v
     });
   }
 };
+
+/**
+ * Аутентификация через Telegram Login Widget
+ * POST /api/auth/telegram-widget
+ */
+export const telegramWidgetAuth = async (req: Request, res: Response): Promise<void> => {
+  try {
+    console.log('🌐 Telegram Widget authentication started');
+    
+    const widgetData = req.body;
+    
+    // Валидация обязательных полей
+    if (!widgetData.id || !widgetData.auth_date || !widgetData.hash) {
+      console.error('❌ Missing required fields in widget data:', {
+        hasId: !!widgetData.id,
+        hasAuthDate: !!widgetData.auth_date,
+        hasHash: !!widgetData.hash
+      });
+      res.status(400).json({ 
+        error: 'Missing required fields: id, auth_date, hash' 
+      });
+      return;
+    }
+
+    console.log('📋 Widget data received:', {
+      id: widgetData.id,
+      first_name: widgetData.first_name,
+      username: widgetData.username,
+      auth_date: widgetData.auth_date
+    });
+
+    // 🔄 ВАЖНО: Здесь нужно реализовать валидацию хэша Telegram Widget
+    // Для демо временно пропускаем проверку, но в продакшене ОБЯЗАТЕЛЬНО
+    const isHashValid = await validateTelegramWidgetHash(widgetData);
+    
+    if (!isHashValid) {
+      console.error('❌ Telegram Widget hash validation failed');
+      res.status(401).json({ error: 'Invalid Telegram widget data' });
+      return;
+    }
+
+    // Подготовка данных пользователя для findOrCreateUser
+    const telegramUser = {
+      id: widgetData.id,
+      first_name: widgetData.first_name || '',
+      last_name: widgetData.last_name || '',
+      username: widgetData.username || '',
+      photo_url: widgetData.photo_url || '',
+      language_code: widgetData.language_code || 'ru',
+      allows_write_to_pm: true, // По умолчанию для widget
+      is_bot: false
+    };
+
+    // Поиск или создание пользователя
+    console.log('🔄 Finding or creating user from widget data...');
+    const user = await findOrCreateUser(telegramUser);
+    console.log('✅ User processed:', user.id);
+
+    // Генерация JWT токена
+    const token = generateToken(user.id);
+
+    console.log('✅ Telegram Widget authentication successful');
+
+    res.json({
+      token,
+      user: {
+        id: user.id.toString(),
+        firstName: user.firstName,
+        lastName: user.lastName,
+        username: user.username,
+        telegramId: user.telegramId.toString()
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Telegram Widget authentication error:', error);
+    
+    if (error instanceof Error) {
+      console.error('❌ Widget auth error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        timestamp: new Date().toISOString()
+      });
+    }
+    
+    res.status(500).json({ 
+      error: 'Internal server error during widget authentication',
+      details: process.env.NODE_ENV === 'development' && error instanceof Error 
+        ? error.message 
+        : undefined
+    });
+  }
+};
+
+/**
+ * Валидация хэша Telegram Widget данных
+ * TODO: Реализовать по документации Telegram
+ */
+const validateTelegramWidgetHash = async (widgetData: any): Promise<boolean> => {
+  try {
+    // 🔄 ВРЕМЕННАЯ ЗАГЛУШКА - В ПРОДАКШЕНЕ РЕАЛИЗОВАТЬ ПРОВЕРКУ!
+    console.log('⚠️ TEMPORARY: Skipping Telegram Widget hash validation');
+    console.log('📊 Widget hash to validate:', widgetData.hash);
+    
+    // Реальная реализация должна:
+    // 1. Сформировать data-check-string из параметров
+    // 2. Вычислить секретный ключ из BOT_TOKEN
+    // 3. Проверить HMAC-SHA256 подпись
+    // 4. Сравнить с полученным hash
+    
+    return true; // Временное решение для демо
+    
+  } catch (error) {
+    console.error('❌ Widget hash validation error:', error);
+    return false;
+  }
+};
