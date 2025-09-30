@@ -1,5 +1,6 @@
 // backend/src/services/telegram-auth.service.ts
-import { validateWebAppData } from '@telegram-auth/server';
+import { AuthDataValidator } from '@telegram-auth/server';
+import { urlStrToAuthDataMap } from '@telegram-auth/server/utils';
 import { TelegramUser } from '../types/telegram';
 
 // Интерфейс для конфигурации (оставляем по желанию)
@@ -57,29 +58,17 @@ export async function validateInitData(initData: string, options: ValidationOpti
       console.log('🔐 Validating initData via @telegram-auth/server...');
     }
 
-    // Ключевой вызов новой библиотеки
-    const isValid = validateWebAppData(BOT_TOKEN, initData);
+    // Инициализируем валидатор с токеном бота
+    const validator = new AuthDataValidator({ botToken: BOT_TOKEN });
+    
+    // Конвертируем данные из URL в Map
+    const data = urlStrToAuthDataMap(initData);
+    
+    // Проверяем данные
+    const user = await validator.validate(data);
 
     if (debug) {
-      console.log('✅ Validation result from library:', isValid);
-    }
-
-    if (!isValid) {
-      throw new Error('InitData hash validation failed');
-    }
-
-    // --- 4. Извлечение данных пользователя ---
-    const params = new URLSearchParams(initData);
-    const userParam = params.get('user');
-
-    if (!userParam) {
-      throw new Error('Missing user parameter in initData');
-    }
-
-    const user = JSON.parse(decodeURIComponent(userParam)) as TelegramUser;
-
-    if (debug) {
-      console.log('✅ User data successfully extracted:', user);
+      console.log('✅ Validation result from library:', user);
       console.log('✅ AUTHENTICATION SUCCESSFUL');
     }
 
@@ -89,7 +78,6 @@ export async function validateInitData(initData: string, options: ValidationOpti
     if (debug) {
       console.error('❌ Authentication failed:', error);
     }
-    // Пробрасываем ошибку для обработки на верхнем уровне
     throw new Error(`Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
