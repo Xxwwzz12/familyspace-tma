@@ -1,12 +1,13 @@
 {
   "name": "frontend",
+  "homepage": ".",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-	"build:debug": "vite build --debug --mode development",
+    "build:debug": "vite build --debug --mode development",
     "build:verbose": "vite build --logLevel info",
     "lint": "eslint .",
     "preview": "vite preview"
