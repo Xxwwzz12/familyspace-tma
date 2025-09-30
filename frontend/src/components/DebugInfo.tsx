@@ -1,18 +1,80 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 const DebugInfo: React.FC = () => {
+  const [isVisible, setIsVisible] = useState(true);
   const debugAuth = (window as any).debugAuth;
   const debugTelegram = (window as any).debugTelegram;
+
+  // Загружаем состояние из localStorage при монтировании
+  useEffect(() => {
+    const savedVisibility = localStorage.getItem('debugPanelVisible');
+    if (savedVisibility !== null) {
+      setIsVisible(JSON.parse(savedVisibility));
+    }
+  }, []);
+
+  // Сохраняем состояние в localStorage при изменении
+  const setVisibility = (visible: boolean) => {
+    setIsVisible(visible);
+    localStorage.setItem('debugPanelVisible', JSON.stringify(visible));
+  };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     alert('Скопировано в буфер обмена!');
   };
 
+  // Если баннер скрыт, показываем только кнопку для его открытия
+  if (!isVisible) {
+    return (
+      <button 
+        style={{
+          position: 'fixed',
+          top: '10px',
+          right: '10px',
+          zIndex: 10000,
+          padding: '5px 10px',
+          fontSize: '12px',
+          background: '#007bff',
+          color: 'white',
+          border: 'none',
+          borderRadius: '3px',
+          cursor: 'pointer'
+        }}
+        onClick={() => setVisibility(true)}
+      >
+        🐛 Показать отладку
+      </button>
+    );
+  }
+
   if (!debugAuth && !debugTelegram) {
     return (
-      <div style={{ padding: '10px', background: '#ffcccc', border: '1px solid red' }}>
-        🔍 Debug информация: Данные не найдены. Проверьте, что аутентификация была вызвана.
+      <div style={{ 
+        position: 'fixed', 
+        top: 0, 
+        left: 0, 
+        right: 0, 
+        padding: '10px', 
+        background: '#ffcccc', 
+        border: '1px solid red',
+        zIndex: 10000
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span>🔍 Debug информация: Данные не найдены. Проверьте, что аутентификация была вызвана.</span>
+          <button 
+            onClick={() => setVisibility(false)}
+            style={{ 
+              background: 'none', 
+              border: 'none', 
+              fontSize: '16px', 
+              cursor: 'pointer',
+              padding: '5px'
+            }}
+          >
+            ✕
+          </button>
+        </div>
       </div>
     );
   }
@@ -31,7 +93,21 @@ const DebugInfo: React.FC = () => {
       maxHeight: '50vh',
       overflow: 'auto'
     }}>
-      <h3>🔍 ДИАГНОСТИЧЕСКАЯ ИНФОРМАЦИЯ</h3>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+        <h3 style={{ margin: 0 }}>🔍 ДИАГНОСТИЧЕСКАЯ ИНФОРМАЦИЯ</h3>
+        <button 
+          onClick={() => setVisibility(false)}
+          style={{ 
+            background: 'none', 
+            border: 'none', 
+            fontSize: '16px', 
+            cursor: 'pointer',
+            padding: '5px'
+          }}
+        >
+          ✕ Закрыть
+        </button>
+      </div>
       
       {debugAuth && (
         <div style={{ marginBottom: '15px', padding: '10px', background: '#e0ffe0', border: '1px solid green' }}>
