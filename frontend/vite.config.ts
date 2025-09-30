@@ -110,167 +110,44 @@ function htmlDebugPlugin(): Plugin {
 }
 
 // -----------------------------
-// Custom HTML Inject Plugin (Variant C)
+// Custom HTML Inject Plugin (Исправленная версия)
 // -----------------------------
 function customHtmlInjectPlugin(): Plugin {
-  let resolvedBase = '/';
-  // собранные имена файлов (заполняем в generateBundle)
-  const collected = { css: [] as string[], js: [] as string[] };
-
   return {
     name: 'custom-html-inject',
-
-    configResolved(config) {
-      resolvedBase = (config.base ?? '/').toString();
-      if (!resolvedBase.endsWith('/')) resolvedBase = resolvedBase + '/';
-      console.log('🔧 [Custom HTML] resolved base =', resolvedBase);
-    },
-
     transformIndexHtml: {
-      enforce: 'pre',
-      transform(_html) {
-        try {
-          const originalPath = path.join(process.cwd(), 'index.html');
-          if (fs.existsSync(originalPath)) {
-            let originalHtml = fs.readFileSync(originalPath, 'utf-8');
-            originalHtml = originalHtml.replace(/<script\s+type=["']module["']\s+src=["']\/src\/.*?<\/script>/g, '');
-            if (!originalHtml.includes('<!-- VITE_INJECT -->')) {
-              if (originalHtml.includes('</head>')) {
-                originalHtml = originalHtml.replace('</head>', '    <!-- VITE_INJECT -->\n</head>');
-                console.log('🔧 [Custom HTML] Placeholder inserted before </head>');
-              } else {
-                originalHtml = originalHtml + '\n<!-- VITE_INJECT -->';
-                console.log('🔧 [Custom HTML] Placeholder appended to end of file');
-              }
-            } else {
-              console.log('🔧 [Custom HTML] Placeholder already present in original index.html');
-            }
-            return originalHtml;
-          } else {
-            console.log('❌ [Custom HTML] original index.html not found, falling back to provided html');
-            return _html;
-          }
-        } catch (err) {
-          console.error('❌ [Custom HTML] transform error:', err);
-          return _html;
-        }
-      }
-    },
-
-    // НАДЁЖНО собираем имена файлов здесь
-    generateBundle(_options, bundle) {
-      try {
-        console.log('🔁 [Custom HTML] generateBundle — collecting asset names');
-        // очищаем предыдущие значения
-        collected.css.length = 0;
-        collected.js.length = 0;
-
-        for (const key of Object.keys(bundle || {})) {
-          const item: any = (bundle as any)[key];
-          if (!item) continue;
-          const outName: string = (item.fileName ?? key).toString();
-
-          // игнорируем сам index.html
-          if (outName === 'index.html' || outName.endsWith('/index.html')) {
-            console.log(`   ↪ skipping emitted index.html entry: ${outName}`);
-            continue;
-          }
-
-          if (outName.endsWith('.css')) {
-            collected.css.push(outName);
-          } else if (outName.endsWith('.js')) {
-            collected.js.push(outName);
-          }
-
-          console.log(`   ↪ found asset (generateBundle): ${outName}, type=${item.type}, isEntry=${item.isEntry ?? 'n/a'}`);
-        }
-
-        collected.css.sort();
-        collected.js.sort();
-
-        console.log(`   ↪ collected.css=${collected.css.length}, collected.js=${collected.js.length}`);
-      } catch (err) {
-        console.error('❌ [Custom HTML] generateBundle collect error:', err);
-      }
-    },
-
-    // В writeBundle используем уже собранные имена — это надёжно
-    writeBundle(_options, bundle) {
-      try {
-        console.log('🔁 [Custom HTML] writeBundle — composing asset tags and writing final index.html');
-
-        // Если по какой-то причине collected пуст, пытаемся собрать прямо сейчас (fallback)
-        if (collected.css.length === 0 && collected.js.length === 0) {
-          console.log('   ↪ collected arrays empty, trying fallback collection from writeBundle bundle...');
-          for (const key of Object.keys(bundle || {})) {
-            const item: any = (bundle as any)[key];
-            if (!item) continue;
-            const outName: string = (item.fileName ?? key).toString();
-            if (outName === 'index.html' || outName.endsWith('/index.html')) continue;
-            if (outName.endsWith('.css')) collected.css.push(outName);
-            else if (outName.endsWith('.js')) collected.js.push(outName);
-            console.log(`   ↪ found asset (writeBundle fallback): ${outName}, type=${item.type}, isEntry=${item.isEntry ?? 'n/a'}`);
-          }
-          collected.css.sort();
-          collected.js.sort();
-        }
-
-        // Сформировать теги
-        const makeHref = (fname: string) => {
-          if (/^https?:\/\//.test(resolvedBase)) return resolvedBase + fname;
-          const baseTrim = resolvedBase.replace(/\/+$/,'');
-          return ('/' + [baseTrim.replace(/^\//,''), fname].filter(Boolean).join('/')).replace(/\/+/g,'/');
-        };
-
-        const cssTags = collected.css.map(f => `<link rel="stylesheet" href="${makeHref(f)}">`).join('\n    ');
-        const jsTags = collected.js.map(f => `<script type="module" src="${makeHref(f)}"></script>`).join('\n    ');
-        const injectMarkup = [cssTags, jsTags].filter(Boolean).join('\n    ');
-
-        // Подставляем в оригинал (или dist как fallback)
-        const originalIndexPath = path.join(process.cwd(), 'index.html');
-        let finalHtml = '';
-        if (fs.existsSync(originalIndexPath)) {
-          finalHtml = fs.readFileSync(originalIndexPath, 'utf-8');
-        } else {
-          const fallbackDist = path.join(process.cwd(), 'dist', 'index.html');
-          if (fs.existsSync(fallbackDist)) finalHtml = fs.readFileSync(fallbackDist, 'utf-8');
-          else {
-            console.error('❌ [Custom HTML] No original or dist index.html available to inject into — aborting');
-            return;
-          }
-        }
-
-        if (injectMarkup) {
-          if (finalHtml.includes('<!-- VITE_INJECT -->')) {
-            finalHtml = finalHtml.replace('<!-- VITE_INJECT -->', '\n    ' + injectMarkup + '\n');
-            console.log('🔧 [Custom HTML] Replaced <!-- VITE_INJECT --> with composed tags');
-          } else if (finalHtml.includes('</head>')) {
-            finalHtml = finalHtml.replace('</head>', '    ' + injectMarkup + '\n</head>');
-            console.log('🔧 [Custom HTML] Injected tags before </head>');
-          } else if (finalHtml.includes('<body')) {
-            finalHtml = finalHtml.replace(/<body([^>]*)>/i, match => `${match}\n    ${injectMarkup}`);
-            console.log('🔧 [Custom HTML] Injected tags at top of <body>');
-          } else {
-            finalHtml = injectMarkup + '\n' + finalHtml;
-            console.log('🔧 [Custom HTML] Prepended tags to document');
-          }
-        } else {
-          console.log('⚠️ [Custom HTML] No assets found to inject (injectMarkup empty)');
-        }
-
-        const outPath = path.join(process.cwd(), 'dist', 'index.html');
-        const outDir = path.dirname(outPath);
-        if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
-        fs.writeFileSync(outPath, finalHtml, 'utf-8');
-
-        console.log(`💾 [Custom HTML] dist/index.html overwritten (css:${collected.css.length} js:${collected.js.length})`);
-      } catch (err) {
-        console.error('❌ [Custom HTML] writeBundle error:', err);
+      enforce: 'pre', // Важно: обрабатываем HTML до стандартных плагинов Vite
+      async transform(html) {
+        console.log('🔧 [Custom HTML] Starting HTML transformation...');
+        
+        // 1. УДАЛЯЕМ старый тег с исходным main.tsx
+        const htmlWithoutOldScript = html.replace(
+          /<script type="module" src="\.\/src\/main\.tsx"><\/script>\s*/g, 
+          ''
+        );
+        console.log('✅ [Custom HTML] Removed old main.tsx script tag');
+        
+        // 2. Формируем новые теги для CSS и JS
+        const cssTag = '<link rel="stylesheet" href="/assets/index-f68f4a23.css">';
+        const jsTags = [
+          '<script type="module" src="/assets/eruda-3f8a668f.js"></script>',
+          '<script type="module" src="/assets/index-37d3d0eb.js"></script>'
+        ].join('\n    ');
+        
+        const composedTags = `${cssTag}\n    ${jsTags}`;
+        
+        // 3. ЗАМЕНЯЕМ плейсхолдер на сгенерированные теги
+        const finalHtml = htmlWithoutOldScript.replace(
+          '<!-- VITE_INJECT -->', 
+          composedTags
+        );
+        
+        console.log('✅ [Custom HTML] Successfully replaced VITE_INJECT placeholder');
+        return finalHtml;
       }
     }
   };
 }
-
 
 // -----------------------------
 // Export Vite config
