@@ -1,11 +1,10 @@
 import { Router } from 'express';
-import { authInit, testAuth } from '../controllers/auth.controller';
-import { testHashValidation } from '../controllers/auth.controller';
+import { authInit, testAuth, testHashValidation } from '../controllers/auth.controller';
 
 const router = Router();
 
 router.post('/init', authInit);
 router.post('/test', testAuth);
-router.post('/auth/test-hash', testHashValidation);
+router.post('/test-hash', testHashValidation); // Исправлено: убрано дублирование /auth
 
 export default router;
