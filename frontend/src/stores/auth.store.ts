@@ -14,6 +14,7 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isInitialized: boolean; // Добавлено: флаг завершения инициализации
   error: string | null;
   initializeAuth: (initDataRaw: string | null) => Promise<void>;
   login: (user: User, token: string) => void;
@@ -22,6 +23,7 @@ interface AuthState {
   setToken: (token: string | null) => void;
   setUser: (user: User | null) => void;
   clearError: () => void;
+  setInitialized: (initialized: boolean) => void; // Добавлено: метод для установки isInitialized
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -31,6 +33,7 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthenticated: false,
       isLoading: true,
+      isInitialized: false, // Начинаем с false
       error: null,
 
       /**
@@ -42,91 +45,55 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         
         try {
-          let response;
+          console.log('🔐 Аутентификация запущена');
           
-          if (initDataRaw) {
-            // 🟢 РАСКОММЕНТИРОВАН нормальный вызов API
-            console.log('🔐 Отправляем аутентификацию на бэкенд...');
-            console.log('📤 Sending initData length:', initDataRaw.length);
-            
-            response = await apiClient.post('/auth/init', { 
-              initData: initDataRaw 
-            });
-            
-            console.log('✅ Ответ от бэкенда:', response);
-          } else {
-            // Тестовая аутентификация (fallback)
-            console.log('🧪 Using test authentication (initDataRaw is null)');
-            response = await apiClient.post('/auth/test');
-          }
+          // 🔴 ВРЕМЕННО: Закомментировать вызов API
+          // const response = await apiClient.post('/auth/init', { 
+          //   initData: initDataRaw 
+          // });
           
-          const { user, token } = response.data;
+          // 🟢 ВРЕМЕННО: Установить тестового пользователя
+          console.log('🔧 ВРЕМЕННО: Аутентификация отключена, устанавливаем тестового пользователя');
+          
+          const testUser = {
+            id: '303987836',
+            firstName: 'Егор',
+            lastName: 'Гуревич',
+            username: 'gurevichegor'
+          };
+          
+          const testToken = 'test-token-' + Date.now();
           
           // Сохраняем токен
           if (typeof window !== 'undefined') {
-            localStorage.setItem('auth_token', token);
+            localStorage.setItem('auth_token', testToken);
           }
           
           set({ 
-            user, 
-            token,
+            user: testUser, 
+            token: testToken,
             isAuthenticated: true, 
             isLoading: false,
+            isInitialized: true, // 🟢 КРИТИЧЕСКИ ВАЖНО: Установить isInitialized
             error: null
           });
           
-          console.log('✅ Authentication successful:', user);
+          console.log('✅ ВРЕМЕННО: Аутентификация завершена, пользователь установлен');
 
           // 💾 Сохранить данные для отображения на странице
           if (typeof window !== 'undefined') {
             (window as any).debugAuth = {
-              status: 'AUTH_SUCCESS',
-              user: user,
+              status: 'AUTH_DISABLED_TEMPORARILY_WITH_INIT',
+              user: testUser,
               initData: initDataRaw,
               timestamp: new Date().toISOString(),
-              storeState: 'AUTHENTICATED_VIA_BACKEND'
+              storeState: 'TEST_USER_SET_AND_INITIALIZED'
             };
           }
         } catch (error: any) {
           console.error('❌ Ошибка аутентификации:', error);
           
-          // Детальный анализ ошибки
-          if (error.response) {
-            console.error('📊 Детали ошибки:', {
-              status: error.response.status,
-              data: error.response.data,
-              headers: error.response.headers
-            });
-            
-            const status = error.response.status;
-            const message = error.response.data?.message || error.response.statusText;
-            
-            console.log(`⚙️ Server error ${status}:`, message);
-            
-            if (status === 401) {
-              console.log('🔐 InitData validation failed on server');
-              set({ error: 'Authentication failed: Invalid credentials' });
-            } else if (status === 400) {
-              console.log('📝 Bad request: Invalid initData format');
-              set({ error: 'Authentication failed: Invalid request format' });
-            } else if (status === 500) {
-              console.log('⚙️ Server error during authentication');
-              set({ error: 'Authentication failed: Server error' });
-            } else {
-              set({ error: `Authentication failed: ${message}` });
-            }
-          } else if (error.request) {
-            // Ошибка сети (нет ответа от сервера)
-            console.log('🌐 Network error: No response from server');
-            set({ error: 'Authentication failed: Network error - please check your connection' });
-          } else {
-            // Другие ошибки
-            console.log('❓ Other error:', error.message);
-            set({ error: `Authentication failed: ${error.message}` });
-          }
-          
-          // 🔴 ВРЕМЕННО: все равно устанавливаем тестового пользователя
-          // чтобы остановить перезагрузку
+          // Даже при ошибке завершаем инициализацию
           console.log('🔧 ВРЕМЕННО: Устанавливаем тестового пользователя из-за ошибки');
           const testUser = {
             id: '303987836',
@@ -146,7 +113,9 @@ export const useAuthStore = create<AuthState>()(
             user: testUser, 
             token: testToken,
             isAuthenticated: true, 
-            isLoading: false
+            isLoading: false,
+            isInitialized: true, // 🟢 КРИТИЧЕСКИ ВАЖНО: Установить isInitialized даже при ошибке
+            error: null
           });
           
           console.log('✅ ВРЕМЕННО: Установлен тестовый пользователь из-за ошибки:', testUser);
@@ -154,12 +123,12 @@ export const useAuthStore = create<AuthState>()(
           // 💾 Сохранить данные для отображения на странице
           if (typeof window !== 'undefined') {
             (window as any).debugAuth = {
-              status: 'AUTH_FAILED_BUT_TEST_USER_SET',
+              status: 'AUTH_ERROR_BUT_INITIALIZED',
               user: testUser,
               initData: initDataRaw,
               timestamp: new Date().toISOString(),
               error: error.message,
-              storeState: 'TEST_USER_SET_DUE_TO_ERROR'
+              storeState: 'TEST_USER_SET_DUE_TO_ERROR_AND_INITIALIZED'
             };
           }
         }
@@ -173,56 +142,48 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         
         try {
-          // 🟢 РАСКОММЕНТИРОВАН нормальный вызов API
-          console.log('🔐 Отправляем тестовую аутентификацию на бэкенд...');
-          const response = await apiClient.post('/auth/test');
-          const { user, token } = response.data;
+          // 🔴 ВРЕМЕННО: Закомментировать вызов API
+          console.log('🔧 ВРЕМЕННО: Тестовая аутентификация отключена, устанавливаем тестового пользователя');
           
-          console.log('✅ Ответ от бэкенда (test):', response);
+          // 🟢 ВРЕМЕННО: Установить тестового пользователя
+          const testUser = {
+            id: '303987836',
+            firstName: 'Егор',
+            lastName: 'Гуревич',
+            username: 'gurevichegor'
+          };
+          
+          const testToken = 'test-token-' + Date.now();
           
           // Сохраняем токен
           if (typeof window !== 'undefined') {
-            localStorage.setItem('auth_token', token);
+            localStorage.setItem('auth_token', testToken);
           }
           
           set({ 
-            user, 
-            token,
+            user: testUser, 
+            token: testToken,
             isAuthenticated: true, 
             isLoading: false,
+            isInitialized: true, // 🟢 КРИТИЧЕСКИ ВАЖНО: Установить isInitialized
             error: null
           });
           
-          console.log('✅ Test authentication successful:', user);
+          console.log('✅ ВРЕМЕННО: Установлен тестовый пользователь через testAuth:', testUser);
 
           // 💾 Сохранить данные для отображения на странице
           if (typeof window !== 'undefined') {
             (window as any).debugAuth = {
-              status: 'TEST_AUTH_SUCCESS',
-              user: user,
+              status: 'TEST_AUTH_DISABLED_TEMPORARILY_WITH_INIT',
+              user: testUser,
               timestamp: new Date().toISOString(),
-              storeState: 'AUTHENTICATED_VIA_TEST'
+              storeState: 'TEST_USER_SET_VIA_TEST_AUTH_AND_INITIALIZED'
             };
           }
         } catch (error: any) {
           console.error('❌ Ошибка тестовой аутентификации:', error);
           
-          // Детальный анализ ошибки
-          if (error.response) {
-            console.error('📊 Детали ошибки (test):', {
-              status: error.response.status,
-              data: error.response.data,
-              headers: error.response.headers
-            });
-            
-            const status = error.response.status;
-            const message = error.response.data?.message || error.response.statusText;
-            set({ error: `Test authentication failed: ${status} - ${message}` });
-          } else {
-            set({ error: `Test authentication failed: ${error.message}` });
-          }
-          
-          // 🔴 ВРЕМЕННО: все равно устанавливаем тестового пользователя
+          // Даже при ошибке завершаем инициализацию
           console.log('🔧 ВРЕМЕННО: Устанавливаем тестового пользователя из-за ошибки тестовой аутентификации');
           const testUser = {
             id: '303987836',
@@ -242,7 +203,9 @@ export const useAuthStore = create<AuthState>()(
             user: testUser, 
             token: testToken,
             isAuthenticated: true, 
-            isLoading: false
+            isLoading: false,
+            isInitialized: true, // 🟢 КРИТИЧЕСКИ ВАЖНО: Установить isInitialized даже при ошибке
+            error: null
           });
           
           console.log('✅ ВРЕМЕННО: Установлен тестовый пользователь из-за ошибки тестовой аутентификации:', testUser);
@@ -250,15 +213,13 @@ export const useAuthStore = create<AuthState>()(
           // 💾 Сохранить данные для отображения на странице
           if (typeof window !== 'undefined') {
             (window as any).debugAuth = {
-              status: 'TEST_AUTH_FAILED_BUT_TEST_USER_SET',
+              status: 'TEST_AUTH_ERROR_BUT_INITIALIZED',
               user: testUser,
               timestamp: new Date().toISOString(),
               error: error.message,
-              storeState: 'TEST_USER_SET_DUE_TO_TEST_ERROR'
+              storeState: 'TEST_USER_SET_DUE_TO_TEST_ERROR_AND_INITIALIZED'
             };
           }
-          
-          throw error;
         }
       },
 
@@ -279,6 +240,7 @@ export const useAuthStore = create<AuthState>()(
           token,
           isAuthenticated: true,
           isLoading: false,
+          isInitialized: true, // При логине тоже помечаем как инициализированное
           error: null
         });
       },
@@ -298,6 +260,7 @@ export const useAuthStore = create<AuthState>()(
           token: null,
           isAuthenticated: false,
           isLoading: false,
+          isInitialized: true, // При логауте сохраняем isInitialized = true, так как приложение уже инициализировано
           error: null
         });
       },
@@ -334,19 +297,30 @@ export const useAuthStore = create<AuthState>()(
         console.log('🧹 Clearing error');
         set({ error: null });
       },
+
+      /**
+       * Устанавливает флаг инициализации
+       * @param initialized - true если инициализация завершена
+       */
+      setInitialized: (initialized: boolean) => {
+        console.log('🏁 setInitialized called with:', initialized);
+        set({ isInitialized: initialized });
+      },
     }),
     {
       name: 'auth-storage',
       onRehydrateStorage: () => (state) => {
         console.log('💾 Storage rehydrated', state);
         if (state && typeof state === 'object') {
-          return { ...state, isLoading: false, error: null };
+          // При восстановлении состояния помечаем как инициализированное
+          return { ...state, isLoading: false, isInitialized: true, error: null };
         }
         return state;
       },
       partialize: (state) => ({
         token: state.token,
-        user: state.user
+        user: state.user,
+        isInitialized: state.isInitialized // Сохраняем состояние инициализации
       }),
       merge: (persistedState, currentState) => {
         if (persistedState && typeof persistedState === 'object') {
@@ -359,7 +333,8 @@ export const useAuthStore = create<AuthState>()(
             testAuth: currentState.testAuth,
             setToken: currentState.setToken,
             setUser: currentState.setUser,
-            clearError: currentState.clearError
+            clearError: currentState.clearError,
+            setInitialized: currentState.setInitialized
           };
         }
         return currentState;

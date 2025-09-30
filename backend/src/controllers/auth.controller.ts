@@ -155,8 +155,8 @@ export const testAuth = async (req: Request, res: Response): Promise<void> => {
 // Временный эндпоинт для тестирования хэша с реальными данными
 export const testHashValidation = async (req: Request, res: Response): Promise<void> => {
   try {
-    // Тестовые данные из ваших логов
-    const testInitData = 'query_id=AAF8fB4SAAAAAHx8HhJW4hQa&user=%7B%22id%22%3A303987836%2C%22first_name%22%3A%22%D0%95%D0%B3%D0%BE%D1%80%22%2C%22last_name%22%3A%22%D0%93%D1%83%D1%80%D0%B5%D0%B2%D0%B8%D1%87%22%2C%22username%22%3A%22gurevichegor%22%2C%22language_code%22%3A%22ru%22%2C%22allows_write_to_pm%22%3Atrue%2C%22photo_url%22%3A%22https%3A%5C%2F%5C%2Ft.me%5C%2Fi%5C%2Fuserpic%5C%2F320%5C%2F9kb8SZ1ANHlzQmQyHP6pZPKvlwG0fE3jw1ICgS0c4Sg.svg%22%7D&auth_date=1759203794&signature=kXpYth9_oLVyC8SkG6N9SXP8UDR6R89ywhgWQtz3U6GVPzfBOGXxIh_aNz97pagAEJwcYQfg2BHMca1JU1eDCw&hash=ad3ab0831aeaf35b8f9076fa098c76ad7ef812d9e8eaf9ae16c7467e903d26b1';
+    // Тестовые данные из ваших логов (обновленные)
+    const testInitData = 'query_id=AAF8fB4SAAAAAHx8HhLC8JIT&user=%7B%22id%22%3A303987836%2C%22first_name%22%3A%22%D0%95%D0%B3%D0%BE%D1%80%22%2C%22last_name%22%3A%22%D0%93%D1%83%D1%80%D0%B5%D0%B2%D0%B8%D1%87%22%2C%22username%22%3A%22gurevichegor%22%2C%22language_code%22%3A%22ru%22%2C%22allows_write_to_pm%22%3Atrue%2C%22photo_url%22%3A%22https%3A%5C%2F%5C%2Ft.me%5C%2Fi%5C%2Fuserpic%5C%2F320%5C%2F9kb8SZ1ANHlzQmQyHP6pZPKvlwG0fE3jw1ICgS0c4Sg.svg%22%7D&auth_date=1759211779&signature=A8a7ZIkwQFGSG8Z96rTqfzmgVcq2o9GkL7I6WSLxE19hqXwvVhN59Mg9dfom6SBPkvnDlhCi1_rHIGp73pxCCA&hash=8bc3031175fe510023776ac58e5a4e20b02b726fd70d6c72d5a84cd74458829b';
     
     console.log('🧪 ТЕСТИРУЕМ НОВЫЙ АЛГОРИТМ...');
     console.log('📊 Тестовые данные:', testInitData);
@@ -168,7 +168,7 @@ export const testHashValidation = async (req: Request, res: Response): Promise<v
       validationResult: result,
       testData: {
         initData: testInitData,
-        expectedHash: 'ad3ab0831aeaf35b8f9076fa098c76ad7ef812d9e8eaf9ae16c7467e903d26b1',
+        expectedHash: '8bc3031175fe510023776ac58e5a4e20b02b726fd70d6c72d5a84cd74458829b',
         algorithm: 'exclude_signature_and_hash'
       }
     });

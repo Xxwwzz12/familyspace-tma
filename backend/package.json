@@ -20,6 +20,7 @@
     "@prisma/client": "^6.15.0",
     "@telegram-apps/sdk": "^3.11.5",
     "@telegram-apps/sdk-react": "^3.3.7",
+    "@telegram-auth/server": "^1.0.4",
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
     "cuid": "^3.0.0",
