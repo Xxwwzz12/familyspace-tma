@@ -150,7 +150,7 @@ function customHtmlInjectPlugin(): Plugin {
 }
 
 // -----------------------------
-// Export Vite config
+// Export Vite config1
 // -----------------------------
 export default defineConfig({
   plugins: [
