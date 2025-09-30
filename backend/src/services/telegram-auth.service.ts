@@ -1,9 +1,8 @@
 // backend/src/services/telegram-auth.service.ts
 import { AuthDataValidator } from '@telegram-auth/server';
-import { urlStrToAuthDataMap } from '@telegram-auth/server/utils';
 import { TelegramUser } from '../types/telegram';
 
-// Интерфейс для конфигурации (оставляем по желанию)
+// Интерфейс для конфигурации
 interface ValidationOptions {
   debug?: boolean;
 }
@@ -19,6 +18,27 @@ const FALLBACK_USER: TelegramUser = {
   allows_write_to_pm: true
 };
 
+function validateEnvironmentVariables(debug = false): string {
+  if (!process.env.BOT_TOKEN) {
+    if (debug) console.error('❌ BOT_TOKEN not set');
+    const envKeys = Object.keys(process.env).sort();
+    if (debug) console.log('📋 Available env:', envKeys.join(', '));
+    throw new Error('BOT_TOKEN is not set in environment variables');
+  }
+  const BOT_TOKEN = process.env.BOT_TOKEN.trim();
+  if (!BOT_TOKEN) throw new Error('BOT_TOKEN is empty or whitespace');
+  if (!BOT_TOKEN.match(/^\d+:[a-zA-Z0-9_-]+$/)) {
+    if (debug) console.error('❌ BOT_TOKEN has unexpected format');
+    throw new Error('Invalid BOT_TOKEN format. Expected "number:secret"');
+  }
+  if (debug) {
+    const masked = BOT_TOKEN.substring(0, 5) + '...' + BOT_TOKEN.substring(BOT_TOKEN.length - 5);
+    console.log('✅ BOT_TOKEN (masked):', masked, 'len=', BOT_TOKEN.length);
+  }
+  
+  return BOT_TOKEN;
+}
+
 export async function validateInitData(initData: string, options: ValidationOptions = {}): Promise<TelegramUser> {
   const { debug = false } = options;
 
@@ -27,13 +47,15 @@ export async function validateInitData(initData: string, options: ValidationOpti
     console.log('[TelegramAuth] raw initData:', initData);
   }
 
-  // --- 1. Режим разработки (Fallback) ---
+  // Режим разработки (Fallback)
   if (initData.includes('hash=development_fallback_hash')) {
     if (debug) {
       console.log('[TelegramAuth] Development fallback mode detected');
     }
+    
     const qs = new URLSearchParams(initData);
     const userParam = qs.get('user');
+    
     if (userParam) {
       try {
         const user = JSON.parse(decodeURIComponent(userParam)) as TelegramUser;
@@ -43,29 +65,29 @@ export async function validateInitData(initData: string, options: ValidationOpti
         if (debug) console.warn('Failed to parse fallback user data, using default', err);
       }
     }
+    
     return FALLBACK_USER;
   }
 
-  // --- 2. Проверка наличия BOT_TOKEN ---
-  const BOT_TOKEN = process.env.BOT_TOKEN;
-  if (!BOT_TOKEN) {
-    throw new Error('BOT_TOKEN is not set in environment variables');
-  }
+  const BOT_TOKEN = validateEnvironmentVariables(debug);
 
-  // --- 3. Валидация данных через @telegram-auth/server ---
   try {
     if (debug) {
       console.log('🔐 Validating initData via @telegram-auth/server...');
     }
 
-    // Инициализируем валидатор с токеном бота
+    // 🔧 ПРЕОБРАЗУЕМ QUERY STRING В ПОЛНЫЙ URL
+    const fakeUrl = `https://example.com?${initData}`;
+    
+    if (debug) {
+      console.log('📋 Fake URL for validation:', fakeUrl);
+    }
+
+    // Создаем валидатор
     const validator = new AuthDataValidator({ botToken: BOT_TOKEN });
     
-    // Конвертируем данные из URL в Map
-    const data = urlStrToAuthDataMap(initData);
-    
-    // Проверяем данные
-    const user = await validator.validate(data);
+    // Передаем полный URL вместо query string
+    const user = await validator.validate(new URL(fakeUrl));
 
     if (debug) {
       console.log('✅ Validation result from library:', user);
@@ -78,6 +100,18 @@ export async function validateInitData(initData: string, options: ValidationOpti
     if (debug) {
       console.error('❌ Authentication failed:', error);
     }
+    
+    // Добавляем дополнительную диагностику при ошибке
+    if (debug) {
+      console.log('🔍 Debug info:');
+      console.log('  - BOT_TOKEN length:', BOT_TOKEN.length);
+      console.log('  - initData length:', initData.length);
+      console.log('  - initData sample:', initData.substring(0, 200) + '...');
+    }
+    
     throw new Error(`Authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
+
+// Экспорт для тестов
+export { validateEnvironmentVariables };
