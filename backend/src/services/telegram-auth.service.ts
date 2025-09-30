@@ -147,16 +147,22 @@ function buildDataCheckString(rawParams: Record<string, string>, debug = false):
   return dataCheckString;
 }
 
-// 🔧 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Упрощенная фабрика секретных ключей
+// 🔧 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Правильное вычисление секретного ключа
 function buildSecretKey(botToken: string, debug = false): Buffer {
-  // Правильный алгоритм: SHA256("WebAppData" + BOT_TOKEN)
+  // 🔴 БЫЛО (НЕПРАВИЛЬНО):
+  // const secretKey = crypto.createHmac('sha256', 'WebAppData').update(BOT_TOKEN).digest();
+  
+  // 🟢 СТАЛО (ПРАВИЛЬНО):
+  // По документации Telegram: secret = HMAC_SHA256("WebAppData", botToken)
+  // В Node.js: crypto.createHmac(algorithm, key).update(data)
+  // Поэтому: key = botToken, data = "WebAppData"
   const secretKey = crypto
-    .createHash('sha256')
-    .update('WebAppData' + botToken)
+    .createHmac('sha256', botToken)
+    .update('WebAppData')
     .digest();
 
   if (debug || isHashCheckDisabled()) {
-    console.log('🔐 Secret key input:', 'WebAppData' + botToken);
+    console.log('🔐 Secret key computation: HMAC_SHA256(botToken, "WebAppData")');
     console.log('🔐 Secret key (hex):', secretKey.toString('hex'));
     console.log('🔐 Secret key length:', secretKey.length);
   }
@@ -281,6 +287,7 @@ export async function validateInitData(initData: string, options: ValidationOpti
       console.log('   2. Verify initData is passed exactly as received from Telegram');
       console.log('   3. Ensure hash and signature are excluded from data-check-string');
       console.log('   4. Check parameter sorting (alphabetical order)');
+      console.log('   5. Verify secret key computation: HMAC_SHA256(botToken, "WebAppData")');
       throw new Error(`Invalid hash. Expected: ${expectedHash}, Received: ${hash}`);
     }
     
