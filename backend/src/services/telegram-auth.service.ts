@@ -107,62 +107,149 @@ function extractAndPrepareParams(initData: string, debug = false) {
   return { params, rawParams, hash };
 }
 
-// 🔧 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Формирование data-check-string без hash и signature
-function buildDataCheckString(rawParams: Record<string, string>, debug = false): string {
-  // Создаем копию параметров и удаляем hash и signature
-  const checkParams = new URLSearchParams();
+// 🔧 ФУНКЦИЯ: Формирование data-check-string с разными вариантами
+function buildDataCheckStringVariants(rawParams: Record<string, string>, debug = false) {
+  const variants: Array<{name: string; dcs: string}> = [];
   
+  // Вариант 1: исключаем hash и signature (текущий)
+  const checkParams1 = new URLSearchParams();
   for (const [key, value] of Object.entries(rawParams)) {
-    // 🔴 ВАЖНО: исключаем hash и signature из data-check-string
     if (key === 'hash' || key === 'signature') continue;
-    
-    // Включаем только разрешенные параметры
     const allowedKeys = ['auth_date', 'query_id', 'user'];
     if (allowedKeys.includes(key)) {
-      checkParams.append(key, value);
+      checkParams1.append(key, value);
     }
   }
-
-  // Сортируем параметры по ключу в алфавитном порядке
-  const sortedEntries = Array.from(checkParams.entries())
-    .sort(([a], [b]) => a.localeCompare(b));
+  const sortedEntries1 = Array.from(checkParams1.entries()).sort(([a], [b]) => a.localeCompare(b));
+  const dcs1 = sortedEntries1.map(([key, value]) => `${key}=${value}`).join('\n');
+  variants.push({ name: 'exclude_hash_and_signature', dcs: dcs1 });
   
-  // Формируем data-check-string
-  const dataCheckString = sortedEntries
-    .map(([key, value]) => `${key}=${value}`)
-    .join('\n');
+  // Вариант 2: исключаем только hash, оставляем signature
+  const checkParams2 = new URLSearchParams();
+  for (const [key, value] of Object.entries(rawParams)) {
+    if (key === 'hash') continue;
+    const allowedKeys = ['auth_date', 'query_id', 'user', 'signature'];
+    if (allowedKeys.includes(key)) {
+      checkParams2.append(key, value);
+    }
+  }
+  const sortedEntries2 = Array.from(checkParams2.entries()).sort(([a], [b]) => a.localeCompare(b));
+  const dcs2 = sortedEntries2.map(([key, value]) => `${key}=${value}`).join('\n');
+  variants.push({ name: 'exclude_only_hash', dcs: dcs2 });
+  
+  // Вариант 3: включаем все параметры кроме hash
+  const checkParams3 = new URLSearchParams();
+  for (const [key, value] of Object.entries(rawParams)) {
+    if (key === 'hash') continue;
+    checkParams3.append(key, value);
+  }
+  const sortedEntries3 = Array.from(checkParams3.entries()).sort(([a], [b]) => a.localeCompare(b));
+  const dcs3 = sortedEntries3.map(([key, value]) => `${key}=${value}`).join('\n');
+  variants.push({ name: 'include_all_except_hash', dcs: dcs3 });
 
   if (debug || isHashCheckDisabled()) {
-    console.log('📋 Data-check-string (без hash и signature):');
-    console.log('```');
-    console.log(dataCheckString);
-    console.log('```');
-    console.log('📏 Длина data-check-string:', dataCheckString.length);
-    console.log('🔤 Параметры в data-check-string:');
-    sortedEntries.forEach(([key, value]) => {
-      console.log(`  ${key}=${value}`);
+    console.log('📋 Data-check-string варианты:');
+    variants.forEach((variant, index) => {
+      console.log(`\n🔤 Вариант ${index + 1}: ${variant.name}`);
+      console.log('```');
+      console.log(variant.dcs);
+      console.log('```');
+      console.log(`📏 Длина: ${variant.dcs.length}`);
     });
   }
 
-  return dataCheckString;
+  return variants;
 }
 
-// 🔧 ИСПРАВЛЕННАЯ ФУНКЦИЯ: Правильное вычисление секретного ключа согласно документации Telegram
-function buildSecretKey(botToken: string, debug = false): Buffer {
-  // 🔴 БЫЛО (НЕПРАВИЛЬНО):
-  // const secretKey = crypto.createHmac('sha256', botToken).update('WebAppData').digest();
-  
-  // 🟢 СТАЛО (ПРАВИЛЬНО):
-  // По документации Telegram: "The secret key is the SHA256 hash of the bot token"
-  console.log('🔐 Secret key computation: SHA256(botToken)');
-  const secretKey = crypto.createHash('sha256').update(botToken).digest();
-  console.log('🔐 Secret key (hex):', secretKey.toString('hex'));
+// 🔧 ФУНКЦИЯ: Создание вариантов секретного ключа
+function buildSecretKeyVariants(botToken: string, debug = false) {
+  const variants = [
+    {
+      name: 'SHA256(botToken)',
+      key: crypto.createHash('sha256').update(botToken).digest()
+    },
+    {
+      name: 'HMAC_SHA256("WebAppData", botToken)',
+      key: crypto.createHmac('sha256', 'WebAppData').update(botToken).digest()
+    },
+    {
+      name: 'HMAC_SHA256(botToken, "WebAppData")', 
+      key: crypto.createHmac('sha256', botToken).update('WebAppData').digest()
+    },
+    {
+      name: 'SHA256("WebAppData" + botToken)',
+      key: crypto.createHash('sha256').update('WebAppData' + botToken).digest()
+    },
+    {
+      name: 'BOT_TOKEN (raw)',
+      key: botToken
+    }
+  ];
 
   if (debug || isHashCheckDisabled()) {
-    console.log('🔐 Secret key length:', secretKey.length);
+    console.log('🔐 Варианты секретного ключа:');
+    variants.forEach((variant, index) => {
+      const keyDesc = Buffer.isBuffer(variant.key) 
+        ? `Buffer(len=${variant.key.length}, hex=${variant.key.toString('hex').substring(0, 16)}...)`
+        : `String(len=${variant.key.length})`;
+      console.log(`  ${index + 1}. ${variant.name}: ${keyDesc}`);
+    });
   }
 
-  return secretKey;
+  return variants;
+}
+
+// 🔧 ФУНКЦИЯ: Тестирование всех комбинаций
+function testAllHashCombinations(
+  secretKeyVariants: Array<{name: string; key: Buffer | string}>,
+  dataCheckStringVariants: Array<{name: string; dcs: string}>,
+  receivedHash: string,
+  debug = false
+): {success: boolean; secretVariant?: string; dcsVariant?: string} {
+  console.log('\n🎯 ТЕСТИРУЕМ ВСЕ КОМБИНАЦИИ ХЭШЕЙ:');
+  console.log('================================');
+  
+  let foundMatch = false;
+  let matchDetails: {secretVariant?: string; dcsVariant?: string} = {};
+
+  for (const secretVariant of secretKeyVariants) {
+    for (const dcsVariant of dataCheckStringVariants) {
+      try {
+        const testHash = crypto.createHmac('sha256', secretVariant.key as crypto.BinaryLike)
+          .update(dcsVariant.dcs)
+          .digest('hex');
+        
+        const matches = testHash === receivedHash;
+        
+        if (debug || isHashCheckDisabled() || matches) {
+          console.log(`\n🔍 TEST: ${secretVariant.name} + ${dcsVariant.name}`);
+          console.log(`🔐 Expected: ${testHash}`);
+          console.log(`🔐 Received: ${receivedHash}`);
+          console.log(`✅ Match: ${matches ? '🎉 ДА!' : '❌ нет'}`);
+        }
+        
+        if (matches && !foundMatch) {
+          console.log('🎉 НАЙДЕНА РАБОЧАЯ КОМБИНАЦИЯ!');
+          foundMatch = true;
+          matchDetails = {
+            secretVariant: secretVariant.name,
+            dcsVariant: dcsVariant.name
+          };
+        }
+      } catch (error) {
+        if (debug || isHashCheckDisabled()) {
+          console.log(`❌ Ошибка в комбинации: ${secretVariant.name} + ${dcsVariant.name}`);
+          console.log(`   Error: ${error}`);
+        }
+      }
+    }
+  }
+
+  if (!foundMatch) {
+    console.log('\n❌ Ни одна комбинация не сработала');
+  }
+
+  return { success: foundMatch, ...matchDetails };
 }
 
 // 🔧 ИСПРАВЛЕННАЯ ГЛАВНАЯ ФУНКЦИЯ ВАЛИДАЦИИ
@@ -238,55 +325,39 @@ export async function validateInitData(initData: string, options: ValidationOpti
     }
   }
 
+  // 🔧 ТЕСТИРУЕМ ВСЕ ВАРИАНТЫ ХЭШЕЙ
+  const secretKeyVariants = buildSecretKeyVariants(BOT_TOKEN, debug || hashCheckDisabled);
+  const dataCheckStringVariants = buildDataCheckStringVariants(rawParams, debug || hashCheckDisabled);
+  
+  const testResult = testAllHashCombinations(
+    secretKeyVariants, 
+    dataCheckStringVariants, 
+    hash, 
+    debug || hashCheckDisabled
+  );
+
   // 🔧 ИСПРАВЛЕННЫЙ АЛГОРИТМ ПРОВЕРКИ ХЭША
   if (hashCheckDisabled) {
     console.warn('⚠️  SKIPPING HASH VERIFICATION - DEBUG_SKIP_HASH_CHECK=true');
     console.warn('⚠️  This should only be used for temporary debugging');
     
-    // Все равно вычисляем и логируем для диагностики
-    const dataCheckString = buildDataCheckString(rawParams, true);
-    const secretKey = buildSecretKey(BOT_TOKEN, true);
-    const expectedHash = crypto
-      .createHmac('sha256', secretKey)
-      .update(dataCheckString)
-      .digest('hex');
-    
-    console.log('🔐 Expected hash:', expectedHash);
-    console.log('🔐 Received hash:', hash);
-    console.log('✅ Hashes match (would be):', expectedHash === hash);
+    if (testResult.success) {
+      console.log(`🎉 Рабочая комбинация найдена: ${testResult.secretVariant} + ${testResult.dcsVariant}`);
+    }
     
   } else {
-    // 🔧 НОРМАЛЬНАЯ ПРОВЕРКА ХЭША С ИСПРАВЛЕННЫМ АЛГОРИТМОМ
-    console.log('🔐 Starting hash validation...');
-    
-    // 1. Формируем data-check-string (без hash и signature)
-    const dataCheckString = buildDataCheckString(rawParams, debug);
-    
-    // 2. Вычисляем секретный ключ как SHA256(botToken)
-    const secretKey = buildSecretKey(BOT_TOKEN, debug);
-    
-    // 3. Вычисляем ожидаемый хеш с использованием секретного ключа
-    const expectedHash = crypto
-      .createHmac('sha256', secretKey)
-      .update(dataCheckString)
-      .digest('hex');
-    
-    console.log('🔐 Expected hash:', expectedHash);
-    console.log('🔐 Received hash:', hash);
-    console.log('✅ Hashes match:', expectedHash === hash);
-    
-    if (expectedHash !== hash) {
-      console.error('❌ Hash validation failed!');
+    if (testResult.success) {
+      console.log(`🎉 Используем рабочую комбинацию: ${testResult.secretVariant} + ${testResult.dcsVariant}`);
+      console.log('🔐 Hash validation successful ✅');
+    } else {
+      console.error('❌ Hash validation failed! Ни одна комбинация не сработала');
       console.log('🔍 Troubleshooting suggestions:');
       console.log('   1. Check that BOT_TOKEN is correct');
       console.log('   2. Verify initData is passed exactly as received from Telegram');
-      console.log('   3. Ensure hash and signature are excluded from data-check-string');
-      console.log('   4. Check parameter sorting (alphabetical order)');
-      console.log('   5. Verify secret key computation: SHA256(botToken)');
-      throw new Error(`Invalid hash. Expected: ${expectedHash}, Received: ${hash}`);
+      console.log('   3. Check if BOT_TOKEN matches the one used in Telegram WebApp');
+      console.log('   4. Verify that no URL encoding/decoding happens in between');
+      throw new Error(`Invalid hash. None of the ${secretKeyVariants.length * dataCheckStringVariants.length} combinations matched received hash`);
     }
-    
-    console.log('🔐 Hash validation successful ✅');
   }
 
   // Парсим user JSON (из decoded params) - это происходит в любом случае
@@ -310,4 +381,11 @@ export async function validateInitData(initData: string, options: ValidationOpti
 }
 
 // Экспорт для тестов
-export { validateEnvironmentVariables, extractAndPrepareParams, buildDataCheckString, isHashCheckDisabled };
+export { 
+  validateEnvironmentVariables, 
+  extractAndPrepareParams, 
+  buildDataCheckStringVariants, 
+  buildSecretKeyVariants,
+  testAllHashCombinations,
+  isHashCheckDisabled 
+};
