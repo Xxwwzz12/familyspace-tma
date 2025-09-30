@@ -16,6 +16,8 @@ interface TelegramWebApp {
   isExpanded?: boolean;
   viewportHeight?: number;
   viewportStableHeight?: number;
+  MainButton?: any;
+  BackButton?: any;
 }
 
 interface Telegram {
@@ -30,7 +32,7 @@ declare global {
 
 export const Environment = {
   /**
-   * Определяет тип окружения приложения
+   * Определяет тип окружения приложения с улучшенной проверкой подлинности TMA
    */
   getEnvironment(): EnvironmentType {
     // SSR безопасность
@@ -38,8 +40,8 @@ export const Environment = {
       return 'browser';
     }
 
-    // Проверяем наличие Telegram WebApp
-    if (this.isTelegram()) {
+    // Расширенная проверка на настоящий TMA
+    if (this.isRealTelegramMiniApp()) {
       return 'telegram';
     }
 
@@ -49,10 +51,101 @@ export const Environment = {
   },
 
   /**
-   * Проверяет, запущены ли в Telegram Mini App
+   * Улучшенная проверка на настоящий Telegram Mini App
+   * Использует multiple факторы для избежания фальсификации
+   */
+  isRealTelegramMiniApp(): boolean {
+    if (typeof window === 'undefined') return false;
+
+    const telegram = window.Telegram;
+    const webApp = telegram?.WebApp;
+
+    // Базовые проверки существования объектов
+    if (!telegram || !webApp) {
+      return false;
+    }
+
+    // Фактор 1: Проверка initData (основной критерий)
+    const hasValidInitData = (
+      webApp.initData && 
+      webApp.initData.length > 0 &&
+      this.isValidInitData(webApp.initData)
+    );
+
+    // Фактор 2: Проверка платформы (дополнительный критерий)
+    const hasValidPlatform = (
+      webApp.platform && 
+      ['android', 'ios', 'tdesktop', 'macos', 'web', 'weba', 'unknown'].includes(webApp.platform)
+    );
+
+    // Фактор 3: Проверка версии (дополнительный критерий)
+    const hasValidVersion = (
+      webApp.version && 
+      typeof webApp.version === 'string' &&
+      webApp.version.length >= 5 // Минимум "6.0.0"
+    );
+
+    // Фактор 4: Проверка специфичных свойств WebApp
+    const hasWebAppProperties = (
+      typeof webApp.isExpanded === 'boolean' &&
+      typeof webApp.viewportHeight === 'number' &&
+      webApp.viewportHeight > 0
+    );
+
+    // Комбинированная проверка: initData ОБЯЗАТЕЛЕН, плюс хотя бы один дополнительный фактор
+    const isLikelyRealTelegram = hasValidInitData && (
+      hasValidPlatform || 
+      hasValidVersion || 
+      hasWebAppProperties
+    );
+
+    // Дополнительная проверка: если в браузерном окружении есть подозрительные объекты
+    if (!isLikelyRealTelegram && webApp) {
+      console.warn('Обнаружен подозрительный объект Telegram WebApp:', {
+        hasValidInitData,
+        hasValidPlatform,
+        hasValidVersion,
+        hasWebAppProperties,
+        userAgent: navigator.userAgent,
+        referrer: document.referrer
+      });
+    }
+
+    return isLikelyRealTelegram;
+  },
+
+  /**
+   * Базовая проверка структуры initData
+   */
+  isValidInitData(initData: string): boolean {
+    if (!initData || typeof initData !== 'string') {
+      return false;
+    }
+
+    try {
+      // Проверяем базовую структуру initData (query string формата)
+      const params = new URLSearchParams(initData);
+      
+      // Минимальные проверки на наличие ожидаемых параметров
+      const hasAuthDate = params.has('auth_date');
+      const hasHash = params.has('hash');
+      
+      // Дополнительные проверки для большей надежности
+      const authDate = params.get('auth_date');
+      const isValidAuthDate = authDate && !isNaN(parseInt(authDate));
+      
+      return hasAuthDate && hasHash && isValidAuthDate;
+    } catch (error) {
+      console.error('Error parsing initData:', error);
+      return false;
+    }
+  },
+
+  /**
+   * Проверяет, запущены ли в Telegram Mini App (алиас для обратной совместимости)
    */
   isTelegram(): boolean {
-    return !!(typeof window !== 'undefined' && window.Telegram?.WebApp);
+    return this.isRealTelegramMiniApp();
   },
 
   /**
@@ -60,7 +153,7 @@ export const Environment = {
    * (показываем в браузере и на мобильных, но не в TMA)
    */
   shouldShowTelegramAuth(): boolean {
-    return !this.isTelegram();
+    return !this.isRealTelegramMiniApp();
   },
 
   /**
@@ -70,17 +163,21 @@ export const Environment = {
     initData?: string; 
     initDataRaw?: string;
     initDataUnsafe?: any;
+    isValid?: boolean;
   } {
-    if (this.isTelegram() && window.Telegram?.WebApp) {
+    if (this.isRealTelegramMiniApp() && window.Telegram?.WebApp) {
       const webApp = window.Telegram.WebApp;
+      const isValid = this.isValidInitData(webApp.initData || '');
+      
       return {
         initData: webApp.initData,
         initDataRaw: webApp.initData,
-        initDataUnsafe: webApp.initDataUnsafe
+        initDataUnsafe: webApp.initDataUnsafe,
+        isValid
       };
     }
 
-    return {};
+    return { isValid: false };
   },
 
   /**
@@ -98,7 +195,9 @@ export const Environment = {
         colorScheme: webApp.colorScheme,
         isExpanded: webApp.isExpanded,
         viewportHeight: webApp.viewportHeight,
-        viewportStableHeight: webApp.viewportStableHeight
+        viewportStableHeight: webApp.viewportStableHeight,
+        initDataLength: webApp.initData?.length || 0,
+        initDataValid: this.isValidInitData(webApp.initData || '')
       };
     }
 
@@ -135,10 +234,10 @@ export const Environment = {
   },
 
   /**
-   * Инициализация Telegram WebApp (если применимо)
+   * Инициализация Telegram WebApp (только для настоящего TMA)
    */
   initializeTelegramWebApp(): void {
-    if (this.isTelegram() && window.Telegram?.WebApp) {
+    if (this.isRealTelegramMiniApp() && window.Telegram?.WebApp) {
       try {
         const webApp = window.Telegram.WebApp;
         
@@ -152,7 +251,11 @@ export const Environment = {
         webApp.setHeaderColor('#000000');
         webApp.setBackgroundColor('#ffffff');
         
-        console.log('Telegram WebApp initialized:', this.getPlatformInfo());
+        console.log('Telegram WebApp initialized:', {
+          platform: webApp.platform,
+          version: webApp.version,
+          initDataValid: this.isValidInitData(webApp.initData || '')
+        });
       } catch (error) {
         console.error('Error initializing Telegram WebApp:', error);
       }
