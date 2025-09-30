@@ -16,34 +16,22 @@ function App() {
   const { isTelegramEnv, isSDKReady, initData } = useTelegram();
   const { initializeAuth, isAuthenticated, isLoading } = useAuthStore();
   
-  // 🔧 ДОБАВЛЕН: useRef для предотвращения двойной инициализации
+  // 🔒 Защита от повторной инициализации
   const initializedRef = useRef(false);
 
-  // 🔧 ДОБАВЛЕН: useEffect для инициализации Eruda
+  // 🔧 Инициализация Eruda только в debug режиме
   useEffect(() => {
-    // Проверяем параметр debug в URL
     const urlParams = new URLSearchParams(window.location.search);
     const isDebugMode = urlParams.get('debug') === 'true';
     
     if (isDebugMode) {
       console.log('🔧 Debug mode activated, initializing Eruda...');
       
-      // Динамический импорт Eruda
       import('eruda')
         .then((erudaModule) => {
           const eruda = erudaModule.default;
           eruda.init();
           console.log('✅ Eruda debug console initialized successfully');
-          
-          // Дополнительная диагностика Telegram WebApp
-          console.log('📱 Telegram WebApp check:', {
-            hasTelegram: typeof window.Telegram !== 'undefined',
-            hasWebApp: typeof window.Telegram?.WebApp !== 'undefined',
-            initData: window.Telegram?.WebApp?.initData,
-            initDataUnsafe: window.Telegram?.WebApp?.initDataUnsafe,
-            platform: window.Telegram?.WebApp?.platform,
-            version: window.Telegram?.WebApp?.version
-          });
         })
         .catch((error) => {
           console.error('❌ Failed to initialize Eruda:', error);
@@ -51,74 +39,29 @@ function App() {
     }
   }, []);
 
+  // 🔧 ЕДИНСТВЕННЫЙ эффект для инициализации приложения
   useEffect(() => {
-    // Безопасный доступ к свойствам Telegram WebApp с опциональной цепочкой
-    const webApp = window.Telegram?.WebApp;
-    const diagnostics = {
-      hasTelegram: typeof window.Telegram !== 'undefined',
-      hasWebApp: typeof webApp !== 'undefined',
-      initData: webApp?.initData || null,
-      initDataUnsafe: webApp?.initDataUnsafe || null,
-      platform: webApp?.platform || 'unknown',
-      version: webApp?.version || 'unknown',
-      themeParams: webApp?.themeParams || {},
-      colorScheme: webApp?.colorScheme || 'light',
-      isExpanded: webApp?.isExpanded ?? false,
-      viewportHeight: webApp?.viewportHeight || 0,
-      viewportStableHeight: webApp?.viewportStableHeight || 0,
-      headerColor: webApp?.headerColor || 'default',
-      backgroundColor: webApp?.backgroundColor || '#ffffff'
-    };
-
-    console.log('🔍 Full Telegram WebApp check:', diagnostics);
-
-    // Дополнительная диагностика только если WebApp доступен
-    if (webApp) {
-      console.log('📱 Telegram WebApp details:', {
-        // Безопасный доступ к методам
-        canExpand: typeof webApp.expand === 'function',
-        canClose: typeof webApp.close === 'function',
-        canReady: typeof webApp.ready === 'function',
-        // Дополнительные свойства
-        initDataLength: webApp.initData?.length || 0,
-        user: webApp.initDataUnsafe?.user ? {
-          id: webApp.initDataUnsafe.user.id,
-          firstName: webApp.initDataUnsafe.user.first_name,
-          username: webApp.initDataUnsafe.user.username
-        } : null
-      });
-    }
-  }, []);
-
-  // 🔄 ОБНОВЛЕН: useEffect для инициализации приложения с защитой от двойного вызова
-  useEffect(() => {
-    // Предотвращаем двойную инициализацию
-    if (initializedRef.current) {
-      console.log('🔄 App already initialized, skipping...');
-      return;
-    }
-    
-    initializedRef.current = true;
-    console.log('🏗️ App initialization started (FIRST TIME)');
-
     const initializeApp = async () => {
-      // Ждем загрузки SDK Telegram
-      if (!isSDKReady) {
-        console.log('⏳ Waiting for Telegram SDK...');
+      // 🔒 Защита от повторной инициализации
+      if (initializedRef.current) {
+        console.log('🔄 App already initialized, skipping...');
         return;
       }
 
+      console.log('🚀 Starting app initialization...');
+      
       try {
-        console.log('📱 Telegram env check:', {
+        // Диагностика Telegram WebApp
+        const webApp = window.Telegram?.WebApp;
+        console.log('📱 Telegram WebApp check:', {
           hasTelegram: typeof window.Telegram !== 'undefined',
-          hasWebApp: typeof window.Telegram?.WebApp !== 'undefined',
-          hasInitData: !!window.Telegram?.WebApp?.initData,
+          hasWebApp: typeof webApp !== 'undefined',
+          hasInitData: !!webApp?.initData,
           isTelegramEnv: isTelegramEnv,
           isSDKReady: isSDKReady
         });
-        
-        // Безопасная инициализация Telegram WebApp
-        const webApp = window.Telegram?.WebApp;
+
+        // Инициализация Telegram WebApp
         if (webApp) {
           try {
             webApp.ready();
@@ -128,38 +71,54 @@ function App() {
           }
         }
 
+        // Аутентификация
         if (isTelegramEnv && initData) {
-          console.log('🔐 Starting Telegram authentication');
+          console.log('🔐 Attempting Telegram authentication...');
           console.log('📋 InitData content:', {
             length: initData?.length || 0,
             first100Chars: initData?.substring(0, 100) + '...'
           });
           
           await initializeAuth(initData);
-          console.log('✅ Telegram authentication completed');
+          console.log('✅ Authentication completed');
         } else {
-          console.log('🧪 Falling back to test authentication');
+          console.log('ℹ️ No Telegram WebApp environment, using standalone mode');
           await initializeAuth(null);
-          console.log('✅ Test authentication completed');
+          console.log('✅ Standalone mode initialized');
         }
-        
+
+        // ✅ КРИТИЧЕСКИ ВАЖНО: правильная последовательность установки флагов
+        initializedRef.current = true;
         setIsInitialized(true);
+        
         console.log('🎉 App initialization completed successfully');
         console.log('🔐 Final auth status:', { isAuthenticated, isLoading });
+
       } catch (error) {
-        console.error('❌ App initialization failed:', error);
+        console.error('❌ App initialization error:', error);
         console.error('💥 Error details:', {
           message: error.message,
           stack: error.stack,
           name: error.name
         });
+        
+        // 🔒 Даже при ошибке снимаем блокировку инициализации
+        initializedRef.current = true;
         setIsInitialized(true);
       }
     };
 
-    initializeApp();
-  }, [isSDKReady, isTelegramEnv, initData, initializeAuth, isAuthenticated, isLoading]);
+    // Запускаем инициализацию только когда SDK готов
+    if (isSDKReady) {
+      initializeApp();
+    } else {
+      console.log('⏳ Waiting for Telegram SDK to be ready...');
+    }
+  }, [isSDKReady, isTelegramEnv, initData, initializeAuth]); // Правильные зависимости
 
+  // Убраны дублирующие useEffect для диагностики Telegram WebApp
+
+  // 🔧 Упрощенное условие показа loading
   if (!isInitialized || isLoading) {
     console.log('⏳ Showing loading state', { isInitialized, isLoading });
     return (
@@ -194,7 +153,7 @@ function App() {
           </Routes>
         </Router>
         
-        {/* 🔍 ДОБАВЛЕН КОМПОНЕНТ ДИАГНОСТИКИ */}
+        {/* 🔍 КОМПОНЕНТ ДИАГНОСТИКИ */}
         <DebugInfo />
         
         {/* Условный рендеринг DebugPanel только в development режиме */}
