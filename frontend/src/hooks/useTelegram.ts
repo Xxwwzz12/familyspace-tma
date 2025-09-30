@@ -17,6 +17,66 @@ interface InitDataUnsafe {
   hash?: string;
 }
 
+interface DebugTelegramData {
+  initData: string;
+  initDataUnsafe: any;
+  version: string;
+  platform: string;
+  rawParams: Record<string, string>;
+  timestamp: string;
+  userAgent: string;
+}
+
+// 🔧 Вспомогательная функция для парсинга initData
+function parseInitData(initData: string): Record<string, string> {
+  if (!initData) return {};
+  
+  const params = new URLSearchParams(initData);
+  const result: Record<string, string> = {};
+  
+  for (const [key, value] of params.entries()) {
+    result[key] = value;
+  }
+  
+  return result;
+}
+
+// Функция для сохранения диагностических данных
+const saveTelegramDiagnostics = (webApp: any) => {
+  if (!webApp) return;
+
+  const initData = webApp.initData || '';
+  const initDataUnsafe = webApp.initDataUnsafe || {};
+  const version = webApp.version || 'unknown';
+  const platform = webApp.platform || 'unknown';
+  
+  const debugData: DebugTelegramData = {
+    initData,
+    initDataUnsafe,
+    version,
+    platform,
+    rawParams: parseInitData(initData),
+    timestamp: new Date().toISOString(),
+    userAgent: navigator.userAgent
+  };
+
+  // 💾 Сохраняем в глобальный объект для отображения на странице
+  (window as any).debugTelegram = debugData;
+
+  // 💾 Резервное сохранение в localStorage
+  try {
+    localStorage.setItem('debug_telegram_data', JSON.stringify(debugData, null, 2));
+    localStorage.setItem('debug_telegram_initData', initData);
+    localStorage.setItem('debug_telegram_version', version);
+    localStorage.setItem('debug_telegram_platform', platform);
+    localStorage.setItem('debug_telegram_timestamp', debugData.timestamp);
+  } catch (e) {
+    console.warn('Не удалось сохранить в localStorage:', e);
+  }
+
+  console.log('💾 Данные Telegram сохранены для диагностики:', debugData);
+};
+
 // Функция для ожидания загрузки Telegram SDK
 const waitForTelegramSDK = (timeout = 3000): Promise<boolean> => {
   return new Promise((resolve) => {
@@ -82,6 +142,13 @@ export const useTelegram = () => {
            typeof window.Telegram.WebApp !== 'undefined';
   }, [isSDKReady]);
 
+  // 🔍 ДИАГНОСТИКА: Сохраняем данные Telegram для анализа
+  useEffect(() => {
+    if (isTelegramEnv && window.Telegram?.WebApp) {
+      saveTelegramDiagnostics(window.Telegram.WebApp);
+    }
+  }, [isTelegramEnv]);
+
   const expandViewport = () => {
     if (isTelegramEnv && window.Telegram?.WebApp) {
       try {
@@ -133,13 +200,21 @@ export const useTelegram = () => {
     return rawInitData;
   }, [isTelegramEnv]);
 
+  // Функция для получения диагностических данных
+  const getDiagnostics = useCallback((): DebugTelegramData | null => {
+    if (typeof window === 'undefined') return null;
+    
+    return (window as any).debugTelegram || null;
+  }, []);
+
   // Логирование для отладки
   console.log('📱 useTelegram hook:', {
     isLoading,
     isSDKReady,
     isTelegramEnv,
     initDataLength: initData?.length || 0,
-    hasUserData: !!userData
+    hasUserData: !!userData,
+    diagnostics: getDiagnostics() ? 'available' : 'unavailable'
   });
 
   return {
@@ -160,7 +235,11 @@ export const useTelegram = () => {
     webApp,
     
     // Функция для получения initData с логированием
-    getInitDataForAuth
+    getInitDataForAuth,
+    
+    // 🔍 Диагностические функции
+    getDiagnostics,
+    hasDiagnostics: !!getDiagnostics()
   };
 };
 

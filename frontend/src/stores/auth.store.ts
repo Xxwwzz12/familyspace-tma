@@ -14,14 +14,14 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  error: string | null; // Добавлено поле для ошибок
+  error: string | null;
   initializeAuth: (initDataRaw: string | null) => Promise<void>;
   login: (user: User, token: string) => void;
   logout: () => void;
   testAuth: () => Promise<void>;
   setToken: (token: string | null) => void;
   setUser: (user: User | null) => void;
-  clearError: () => void; // Добавлен метод для очистки ошибок
+  clearError: () => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -42,6 +42,47 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         
         try {
+          // 🔴 ВРЕМЕННО: Закомментировать вызов API
+          console.log('🔧 ВРЕМЕННО: Аутентификация отключена, устанавливаем тестового пользователя');
+          
+          // 🟢 ВРЕМЕННО: Установить тестового пользователя
+          const testUser = {
+            id: '303987836',
+            firstName: 'Егор',
+            lastName: 'Гуревич',
+            username: 'gurevichegor'
+          };
+          
+          const testToken = 'test-token-' + Date.now();
+          
+          // Сохраняем токен
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('auth_token', testToken);
+          }
+          
+          set({ 
+            user: testUser, 
+            token: testToken,
+            isAuthenticated: true, 
+            isLoading: false,
+            error: null
+          });
+          
+          console.log('✅ ВРЕМЕННО: Установлен тестовый пользователь:', testUser);
+
+          // 💾 Сохранить данные для отображения на странице
+          if (typeof window !== 'undefined') {
+            (window as any).debugAuth = {
+              status: 'AUTH_DISABLED_TEMPORARILY',
+              user: testUser,
+              initData: initDataRaw,
+              timestamp: new Date().toISOString(),
+              storeState: 'TEST_USER_SET'
+            };
+          }
+
+          // 🔴 ВРЕМЕННО ЗАКОММЕНТИРОВАН ВЫЗОВ API
+          /*
           let response;
           
           if (initDataRaw) {
@@ -74,6 +115,7 @@ export const useAuthStore = create<AuthState>()(
           });
           
           console.log('✅ Authentication successful:', user);
+          */
         } catch (error: any) {
           console.error('❌ Authentication failed:', error);
           
@@ -101,31 +143,6 @@ export const useAuthStore = create<AuthState>()(
             // Ошибка сети (нет ответа от сервера)
             console.log('🌐 Network error: No response from server');
             set({ error: 'Authentication failed: Network error - please check your connection' });
-            
-            // Fallback: попробовать тестовую аутентификацию при сетевой ошибке
-            console.log('🔄 Trying fallback to test authentication...');
-            try {
-              const testResponse = await apiClient.post('/auth/test');
-              const { user, token } = testResponse.data;
-              
-              if (typeof window !== 'undefined') {
-                localStorage.setItem('auth_token', token);
-              }
-              
-              set({ 
-                user, 
-                token,
-                isAuthenticated: true, 
-                isLoading: false,
-                error: null
-              });
-              
-              console.log('✅ Fallback authentication successful');
-              return; // Успешный fallback, выходим
-            } catch (fallbackError) {
-              console.error('❌ Fallback authentication also failed:', fallbackError);
-              set({ error: 'Authentication failed: Network error and fallback also failed' });
-            }
           } else {
             // Другие ошибки
             console.log('❓ Other error:', error.message);
@@ -144,6 +161,46 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true, error: null });
         
         try {
+          // 🔴 ВРЕМЕННО: Закомментировать вызов API
+          console.log('🔧 ВРЕМЕННО: Тестовая аутентификация отключена, устанавливаем тестового пользователя');
+          
+          // 🟢 ВРЕМЕННО: Установить тестового пользователя
+          const testUser = {
+            id: '303987836',
+            firstName: 'Егор',
+            lastName: 'Гуревич',
+            username: 'gurevichegor'
+          };
+          
+          const testToken = 'test-token-' + Date.now();
+          
+          // Сохраняем токен
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('auth_token', testToken);
+          }
+          
+          set({ 
+            user: testUser, 
+            token: testToken,
+            isAuthenticated: true, 
+            isLoading: false,
+            error: null
+          });
+          
+          console.log('✅ ВРЕМЕННО: Установлен тестовый пользователь через testAuth:', testUser);
+
+          // 💾 Сохранить данные для отображения на странице
+          if (typeof window !== 'undefined') {
+            (window as any).debugAuth = {
+              status: 'TEST_AUTH_DISABLED_TEMPORARILY',
+              user: testUser,
+              timestamp: new Date().toISOString(),
+              storeState: 'TEST_USER_SET_VIA_TEST_AUTH'
+            };
+          }
+
+          // 🔴 ВРЕМЕННО ЗАКОММЕНТИРОВАН ВЫЗОВ API
+          /*
           const response = await apiClient.post('/auth/test');
           const { user, token } = response.data;
           
@@ -161,6 +218,7 @@ export const useAuthStore = create<AuthState>()(
           });
           
           console.log('✅ Test authentication successful:', user);
+          */
         } catch (error: any) {
           console.error('❌ Test authentication failed:', error);
           

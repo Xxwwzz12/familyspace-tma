@@ -9,6 +9,7 @@ import useTelegram from './hooks/useTelegram';
 import { useAuthStore } from './stores/auth.store';
 import DevelopmentBanner from './components/DevelopmentBanner';
 import DebugPanel from './components/DebugPanel';
+import DebugInfo from './components/DebugInfo';
 
 function App() {
   const [isInitialized, setIsInitialized] = useState(false);
@@ -181,6 +182,10 @@ function App() {
             <Route path="/onboarding" element={<OnboardingPage />} />
           </Routes>
         </Router>
+        
+        {/* 🔍 ДОБАВЛЕН КОМПОНЕНТ ДИАГНОСТИКИ */}
+        <DebugInfo />
+        
         {/* Условный рендеринг DebugPanel только в development режиме */}
         {process.env.NODE_ENV === 'development' && <DebugPanel />}
       </Layout>
