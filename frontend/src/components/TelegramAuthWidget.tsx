@@ -1,4 +1,4 @@
-\// frontend/src/components/TelegramAuthWidget.tsx
+// frontend/src/components/TelegramAuthWidget.tsx
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../stores/auth.store';
 import './TelegramAuthWidget.css';
