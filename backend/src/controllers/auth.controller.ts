@@ -99,7 +99,7 @@ export const authInit = async (req: Request, res: Response): Promise<void> => {
 // Эндпоинт для тестирования
 export const testAuth = async (req: Request, res: Response): Promise<void> => {
   try {
-    console.log('🧪 Test auth endpoint called');
+    console.log('🟢 POST /auth/test handler was called');
     
     // Генерируем случайный telegramId для каждого запроса
     const randomTelegramId = Math.floor(Math.random() * 1000000000);
@@ -121,6 +121,10 @@ export const testAuth = async (req: Request, res: Response): Promise<void> => {
     
     console.log('✅ Test auth successful for user:', user.id);
 
+    // 🔍 Явно логируем отправляемые заголовки
+    const headers = res.getHeaders();
+    console.log('📤 Response headers being sent:', Object.fromEntries(Object.entries(headers)));
+
     res.json({
       token,
       user: {
@@ -132,7 +136,7 @@ export const testAuth = async (req: Request, res: Response): Promise<void> => {
       }
     });
   } catch (error) {
-    console.error('❌ Test auth error:', error);
+    console.error('❌ Error in testAuth:', error);
     
     if (error instanceof Error) {
       console.error('❌ Test auth error details:', {
