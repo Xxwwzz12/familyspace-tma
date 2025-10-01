@@ -17,7 +17,6 @@ export class AuthService {
 
   /**
    * Инициализация аутентификации при загрузке сервиса
-   * Восстанавливает токен из localStorage если есть
    */
   private initializeAuth(): void {
     const storedToken = localStorage.getItem('auth_token');
@@ -37,16 +36,16 @@ export class AuthService {
     if (Environment.isTelegram()) {
       return await this.authenticateTelegram();
     } else {
+      // Для браузера возвращаем ожидание виджета
       return {
         success: false,
-        error: 'Telegram Login Widget not yet implemented'
+        error: 'Use Telegram Login Widget for browser authentication'
       };
     }
   }
 
   /**
    * Аутентификация через Telegram Mini App
-   * Использует существующий эндпоинт /auth/init
    */
   private async authenticateTelegram(): Promise<AuthResult> {
     try {
@@ -66,7 +65,6 @@ export class AuthService {
       
       console.log('✅ Telegram Mini App authentication successful');
       
-      // Сохраняем токен после успешной аутентификации
       if (response.data.token) {
         this.setAuthToken(response.data.token);
       }
@@ -87,32 +85,70 @@ export class AuthService {
   }
 
   /**
-   * Аутентификация через Telegram Login Widget (для браузера)
-   * Будет реализована в следующем этапе
+   * Аутентификация через Telegram Login Widget
+   * Вызывается из компонента TelegramAuthWidget после получения данных
    */
-  async authenticateTelegramWidget(authData: any): Promise<AuthResult> {
-    console.log('🌐 Authenticating via Telegram Widget...', authData);
-    
+  async authenticateTelegramWidget(widgetData: any): Promise<AuthResult> {
     try {
-      // TODO: Реализовать вызов бэкенда для обработки данных виджета
-      // Создадим новый эндпоинт /auth/telegram-widget
-      const response = await apiClient.post('/auth/telegram-widget', authData);
-      
+      console.log('🔐 Processing Telegram Widget auth data:', {
+        id: widgetData.id,
+        first_name: widgetData.first_name,
+        username: widgetData.username,
+        auth_date: new Date(widgetData.auth_date * 1000).toISOString()
+      });
+
+      // ВАЛИДАЦИЯ: Проверяем обязательные поля
+      if (!widgetData.id || !widgetData.auth_date || !widgetData.hash) {
+        const error = 'Missing required Telegram Widget fields';
+        console.error('❌', error, widgetData);
+        return { success: false, error };
+      }
+
+      // ОТПРАВКА НА БЭКЕНД: Отправляем данные на эндпоинт /auth/telegram-widget
+      const response = await apiClient.post('/auth/telegram-widget', {
+        authData: widgetData
+      });
+
+      console.log('✅ Telegram Widget backend response:', response.data);
+
+      // СОХРАНЕНИЕ ТОКЕНА: Сохраняем JWT токен для будущих запросов
       if (response.data.token) {
         this.setAuthToken(response.data.token);
+        console.log('🔑 Auth token saved to storage');
       }
-      
+
       return {
         success: true,
         token: response.data.token,
         user: response.data.user
       };
+
     } catch (error: any) {
       console.error('❌ Telegram Widget authentication failed:', error);
       
-      return {
-        success: false,
-        error: error.response?.data?.message || 'Telegram Widget authentication failed'
+      // ДЕТАЛЬНАЯ ОБРАБОТКА ОШИБОК: Различаем типы ошибок для лучшего UX
+      let errorMessage = 'Telegram Widget authentication failed';
+      
+      if (error.response) {
+        const status = error.response.status;
+        const data = error.response.data;
+        
+        console.error('📊 Error details:', { status, data });
+        
+        if (status === 401) {
+          errorMessage = data?.error || 'Invalid authentication data';
+        } else if (status === 400) {
+          errorMessage = data?.error || 'Invalid request data';
+        } else if (status >= 500) {
+          errorMessage = 'Server error, please try again later';
+        }
+      } else if (error.request) {
+        errorMessage = 'Network error: cannot connect to server';
+      }
+
+      return { 
+        success: false, 
+        error: errorMessage 
       };
     }
   }
@@ -121,15 +157,10 @@ export class AuthService {
    * Выход из системы
    */
   logout(): void {
-    // Удаляем токен из localStorage
     localStorage.removeItem('auth_token');
-    
-    // Удаляем заголовок Authorization из apiClient
     delete apiClient.defaults.headers.common['Authorization'];
-    
     console.log('🚪 User logged out');
     
-    // Если в Telegram, можно закрыть WebApp
     if (Environment.isTelegram() && (window as any).Telegram?.WebApp) {
       // (window as any).Telegram.WebApp.close(); // Раскомментировать когда нужно
     }

@@ -2,42 +2,18 @@
 
 /**
  * Утилиты для определения окружения приложения и управления параметрами аутентификации
+ * Реализует строгую проверку для надежного различения реального TMA и браузерной среды
  */
 
 export type EnvironmentType = 'telegram' | 'browser' | 'mobile';
 
-// Типы для Telegram WebApp для улучшения TypeScript поддержки
-interface TelegramWebApp {
-  initData?: string;
-  initDataUnsafe?: any;
-  platform?: string;
-  version?: string;
-  colorScheme?: string;
-  isExpanded?: boolean;
-  viewportHeight?: number;
-  viewportStableHeight?: number;
-  MainButton?: any;
-  BackButton?: any;
-}
-
-interface Telegram {
-  WebApp?: TelegramWebApp;
-}
-
-declare global {
-  interface Window {
-    Telegram?: Telegram;
-  }
-}
-
-// Список допустимых платформ для настоящего TMA
-const VALID_TELEGRAM_PLATFORMS = [
-  'android', 'ios', 'tdesktop', 'macos', 'windows', 'linux', 'unknown'
-];
+// Допустимые платформы для настоящего TMA (исключая браузерную эмуляцию)
+const VALID_TELEGRAM_PLATFORMS = ['android', 'ios', 'tdesktop', 'macos', 'windows', 'linux'];
 
 export const Environment = {
   /**
-   * Определяет тип окружения приложения с улучшенной проверкой подлинности TMA
+   * Определяет тип окружения приложения с улучшенной эвристикой
+   * Возвращает 'telegram' только для настоящего Telegram Mini Apps
    */
   getEnvironment(): EnvironmentType {
     // SSR безопасность
@@ -50,14 +26,17 @@ export const Environment = {
       return 'telegram';
     }
 
-    // Улучшенное определение мобильных устройств
-    const isMobile = this.isMobileDevice();
-    return isMobile ? 'mobile' : 'browser';
+    // Определение мобильного браузера
+    if (this.isMobileDevice()) {
+      return 'mobile';
+    }
+
+    return 'browser';
   },
 
   /**
    * Улучшенная проверка на настоящий Telegram Mini App
-   * Использует multiple факторы для избежания фальсификации
+   * Использует multiple факторы для избежания фальсификации :cite[1]:cite[6]
    */
   isRealTelegramMiniApp(): boolean {
     if (typeof window === 'undefined') return false;
@@ -70,51 +49,44 @@ export const Environment = {
       return false;
     }
 
-    // Фактор 1: Проверка initData (основной критерий)
+    // Фактор 1: Проверка initData (основной критерий) :cite[1]
     const hasValidInitData = (
       webApp.initData && 
       webApp.initData.length > 0 &&
       this.isValidInitData(webApp.initData)
     );
 
-    // Фактор 2: Строгая проверка платформы
+    // Фактор 2: Строгая проверка платформы :cite[1]
     const hasValidPlatform = (
       webApp.platform && 
-      VALID_TELEGRAM_PLATFORMS.includes(webApp.platform) &&
-      // Критически важно: исключаем платформу 'web' - это браузерная эмуляция
-      webApp.platform !== 'web'
+      VALID_TELEGRAM_PLATFORMS.includes(webApp.platform)
     );
 
-    // Фактор 3: Проверка версии (дополнительный критерий)
-    const hasValidVersion = (
-      webApp.version && 
-      typeof webApp.version === 'string' &&
-      webApp.version.length >= 5 // Минимум "6.0.0"
+    // Фактор 3: Проверка пользовательских данных
+    const hasUserData = (
+      webApp.initDataUnsafe?.user?.id &&
+      typeof webApp.initDataUnsafe.user.id === 'number'
     );
 
-    // Фактор 4: Проверка специфичных свойств WebApp
+    // Фактор 4: Проверка стандартных свойств WebApp API :cite[6]
     const hasWebAppProperties = (
       typeof webApp.isExpanded === 'boolean' &&
       typeof webApp.viewportHeight === 'number' &&
       webApp.viewportHeight > 0
     );
 
-    // Комбинированная проверка: initData ОБЯЗАТЕЛЕН + валидная платформа + хотя бы один дополнительный фактор
-    const isLikelyRealTelegram = hasValidInitData && hasValidPlatform && (
-      hasValidVersion || 
-      hasWebAppProperties
-    );
+    // Комбинированная проверка: initData + платформа + хотя бы один дополнительный фактор
+    const isLikelyRealTelegram = hasValidInitData && hasValidPlatform && (hasUserData || hasWebAppProperties);
 
-    // Детальное логирование для отладки
-    if (webApp && !isLikelyRealTelegram) {
+    // Детальное логирование для отладки подозрительных случаев
+    if (webApp && !isLikelyRealTelegram && process.env.NODE_ENV === 'development') {
       console.warn('Обнаружен подозрительный объект Telegram WebApp:', {
         hasValidInitData,
         hasValidPlatform,
         platform: webApp.platform,
-        hasValidVersion,
+        hasUserData,
         hasWebAppProperties,
-        userAgent: navigator.userAgent,
-        referrer: document.referrer
+        userAgent: navigator.userAgent
       });
     }
 
@@ -122,7 +94,22 @@ export const Environment = {
   },
 
   /**
-   * Базовая проверка структуры initData
+   * Проверяет, запущены ли в Telegram Mini App (алиас для обратной совместимости)
+   */
+  isTelegram(): boolean {
+    return this.isRealTelegramMiniApp();
+  },
+
+  /**
+   * Проверяет, нужно ли показывать Telegram Login Widget
+   * (показываем в браузере и на мобильных, но не в TMA) :cite[1]
+   */
+  shouldShowTelegramAuth(): boolean {
+    return !this.isRealTelegramMiniApp();
+  },
+
+  /**
+   * Базовая проверка структуры initData :cite[1]
    */
   isValidInitData(initData: string): boolean {
     if (!initData || typeof initData !== 'string') {
@@ -139,28 +126,13 @@ export const Environment = {
       
       // Дополнительные проверки для большей надежности
       const authDate = params.get('auth_date');
-      const isValidAuthDate = authDate && !isNaN(parseInt(authDate));
+      const isValidAuthDate = authDate && !isNaN(parseInt(authdate));
       
       return hasAuthDate && hasHash && isValidAuthDate;
     } catch (error) {
       console.error('Error parsing initData:', error);
       return false;
     }
-  },
-
-  /**
-   * Проверяет, запущены ли в Telegram Mini App (алиас для обратной совместимости)
-   */
-  isTelegram(): boolean {
-    return this.isRealTelegramMiniApp();
-  },
-
-  /**
-   * Проверяет, нужно ли показывать Telegram Login Widget
-   * (показываем в браузере и на мобильных, но не в TMA)
-   */
-  shouldShowTelegramAuth(): boolean {
-    return !this.isRealTelegramMiniApp();
   },
 
   /**
@@ -190,6 +162,19 @@ export const Environment = {
   },
 
   /**
+   * Улучшенная проверка мобильного устройства
+   */
+  isMobileDevice(): boolean {
+    if (typeof navigator === 'undefined') return false;
+
+    const userAgent = navigator.userAgent;
+    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+    const isTablet = /iPad|Tablet|Touchpad|Kindle/i.test(userAgent);
+    
+    return isMobile || isTablet || window.innerWidth <= 768;
+  },
+
+  /**
    * Получает информацию о платформе для логирования и аналитики
    */
   getPlatformInfo(): Record<string, any> {
@@ -197,8 +182,7 @@ export const Environment = {
     
     if (env === 'telegram' && window.Telegram?.WebApp) {
       const webApp = window.Telegram.WebApp;
-      const platformValidity = VALID_TELEGRAM_PLATFORMS.includes(webApp.platform || '') && 
-                              webApp.platform !== 'web';
+      const platformValidity = VALID_TELEGRAM_PLATFORMS.includes(webApp.platform || '');
       
       return {
         environment: 'telegram',
@@ -210,7 +194,8 @@ export const Environment = {
         viewportHeight: webApp.viewportHeight,
         viewportStableHeight: webApp.viewportStableHeight,
         initDataLength: webApp.initData?.length || 0,
-        initDataValid: this.isValidInitData(webApp.initData || '')
+        initDataValid: this.isValidInitData(webApp.initData || ''),
+        userDataPresent: !!webApp.initDataUnsafe?.user
       };
     }
 
@@ -231,90 +216,5 @@ export const Environment = {
         height: window.innerHeight
       }
     };
-  },
-
-  /**
-   * Улучшенная проверка мобильного устройства
-   */
-  isMobileDevice(): boolean {
-    if (typeof navigator === 'undefined') return false;
-
-    const userAgent = navigator.userAgent;
-    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
-    const isTablet = /iPad|Tablet|Touchpad|Kindle/i.test(userAgent);
-    
-    return isMobile || isTablet || window.innerWidth <= 768;
-  },
-
-  /**
-   * Получает список допустимых платформ для TMA (для тестирования)
-   */
-  getValidTelegramPlatforms(): string[] {
-    return [...VALID_TELEGRAM_PLATFORMS];
-  },
-
-  /**
-   * Инициализация Telegram WebApp (только для настоящего TMA)
-   */
-  initializeTelegramWebApp(): void {
-    if (this.isRealTelegramMiniApp() && window.Telegram?.WebApp) {
-      try {
-        const webApp = window.Telegram.WebApp;
-        
-        // Разворачиваем на весь экран
-        webApp.expand();
-        
-        // Включаем кнопку "Назад" если нужно
-        webApp.BackButton.isVisible = false;
-        
-        // Настраиваем цветовую схему
-        webApp.setHeaderColor('#000000');
-        webApp.setBackgroundColor('#ffffff');
-        
-        console.log('Telegram WebApp initialized:', {
-          platform: webApp.platform,
-          version: webApp.version,
-          platformValid: VALID_TELEGRAM_PLATFORMS.includes(webApp.platform || '') && webApp.platform !== 'web',
-          initDataValid: this.isValidInitData(webApp.initData || '')
-        });
-      } catch (error) {
-        console.error('Error initializing Telegram WebApp:', error);
-      }
-    }
-  },
-
-  /**
-   * Получает базовый URL для API запросов
-   */
-  getApiBaseUrl(): string {
-    const baseUrl = process.env.REACT_APP_API_URL || 'https://api.yourdomain.com';
-    
-    // В development всегда используем localhost
-    if (process.env.NODE_ENV === 'development') {
-      return process.env.REACT_APP_DEV_API_URL || 'http://localhost:3001/api';
-    }
-    
-    return baseUrl;
-  },
-
-  /**
-   * Проверяет development режим
-   */
-  isDevelopment(): boolean {
-    return process.env.NODE_ENV === 'development';
-  },
-
-  /**
-   * Получает версию приложения
-   */
-  getAppVersion(): string {
-    return process.env.REACT_APP_VERSION || '1.0.0';
   }
 };
-
-// Автоматическая инициализация при импорте
-if (typeof window !== 'undefined') {
-  Environment.initializeTelegramWebApp();
-}
-
-export default Environment;

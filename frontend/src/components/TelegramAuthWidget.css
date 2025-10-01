@@ -1,3 +1,4 @@
+/* frontend/src/components/TelegramAuthWidget.css */
 .telegram-auth-widget {
   display: flex;
   flex-direction: column;
@@ -5,28 +6,32 @@
   padding: 20px;
   max-width: 300px;
   margin: 0 auto;
+  text-align: center;
+}
+
+.telegram-auth-widget h3 {
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.telegram-auth-widget p {
+  margin-bottom: 16px;
+  color: #666;
+  font-size: 14px;
 }
 
 .widget-container {
   width: 100%;
-  text-align: center;
+  margin: 16px 0;
 }
 
-.widget-placeholder {
-  min-height: 60px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.widget-loading {
+.widget-loading-state {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
+  padding: 20px;
   color: #666;
-  font-size: 14px;
 }
 
 .loading-spinner {
@@ -43,25 +48,27 @@
   100% { transform: rotate(360deg); }
 }
 
-.widget-error {
+.widget-error-state {
   text-align: center;
-  padding: 20px;
+  padding: 16px;
   background-color: #ffeaea;
   border: 1px solid #ffcdd2;
   border-radius: 8px;
   width: 100%;
+  margin-top: 12px;
 }
 
 .error-message {
-  margin-bottom: 15px;
+  margin-bottom: 12px;
   color: #d32f2f;
+  font-size: 14px;
 }
 
 .reload-button {
   background-color: #0088cc;
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 8px 16px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 14px;
@@ -72,25 +79,18 @@
   background-color: #006fa0;
 }
 
-.widget-info {
-  margin-top: 10px;
-  font-size: 12px;
-  color: #666;
-  text-align: center;
-}
-
-.widget-info p {
-  margin: 0;
-  line-height: 1.4;
+.reload-button:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
 }
 
 /* Адаптивность */
 @media (max-width: 480px) {
   .telegram-auth-widget {
-    padding: 15px;
+    padding: 16px;
   }
   
-  .widget-placeholder {
-    min-height: 50px;
+  .widget-error-state {
+    padding: 12px;
   }
 }

@@ -1,10 +1,11 @@
+\// frontend/src/components/TelegramAuthWidget.tsx
 import React, { useEffect, useRef, useState } from 'react';
 import { useAuthStore } from '../stores/auth.store';
 import './TelegramAuthWidget.css';
 
 interface TelegramAuthWidgetProps {
   onAuthSuccess?: (userData: any) => void;
-  onAuthError?: (error: any) => void;
+  onAuthError?: (error: string) => void;
   buttonSize?: 'large' | 'medium' | 'small';
   showUserPhoto?: boolean;
 }
@@ -15,164 +16,220 @@ declare global {
     TelegramLoginWidget?: {
       dataOnauth?: (user: any) => void;
     };
+    onTelegramAuth?: (userData: any) => void;
   }
 }
 
-const TelegramAuthWidget: React.FC<TelegramAuthWidgetProps> = ({
+export const TelegramAuthWidget: React.FC<TelegramAuthWidgetProps> = ({
   onAuthSuccess,
   onAuthError,
   buttonSize = 'large',
   showUserPhoto = false
 }) => {
   const widgetContainerRef = useRef<HTMLDivElement>(null);
-  const [isWidgetLoaded, setIsWidgetLoaded] = useState(false);
-  const [widgetError, setWidgetError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { loginWithTelegramWidget } = useAuthStore();
-
-  // Настройки виджета
-  const BOT_USERNAME = 'Family_Space_MVP_bot'; // Заменить на актуальный username бота
-  const WIDGET_SCRIPT_URL = 'https://telegram.org/js/telegram-widget.js?22';
-
-  useEffect(() => {
-    loadWidget();
-    
-    return () => {
-      // Очистка при размонтировании
-      if (window.TelegramLoginWidget) {
-        delete window.TelegramLoginWidget.dataOnauth;
-      }
-    };
-  }, []);
-
-  const loadWidget = () => {
-    if (!widgetContainerRef.current) {
-      setWidgetError('Widget container not found');
-      return;
-    }
-
-    // Проверяем, не загружен ли виджет уже
-    if (isWidgetLoaded) {
-      return;
-    }
-
-    // Проверяем, не загружен ли скрипт уже
-    if (document.querySelector(`script[src="${WIDGET_SCRIPT_URL}"]`)) {
-      initializeWidget();
-      return;
-    }
-
-    // Создаем скрипт виджета
-    const script = document.createElement('script');
-    script.src = WIDGET_SCRIPT_URL;
-    script.async = true;
-    
-    // Глобальная функция обратного вызова для виджета
-    window.TelegramLoginWidget = {
-      dataOnauth: (user: any) => handleTelegramAuth(user)
-    };
-
-    script.onload = () => {
-      console.log('✅ Telegram Widget script loaded');
-      initializeWidget();
-    };
-
-    script.onerror = () => {
-      console.error('❌ Failed to load Telegram Widget script');
-      setWidgetError('Failed to load Telegram authentication');
-      onAuthError?.('Widget script loading failed');
-    };
-
-    document.body.appendChild(script);
-  };
-
-  const initializeWidget = () => {
-    if (!widgetContainerRef.current) return;
-
-    // Очищаем контейнер перед инициализацией
-    widgetContainerRef.current.innerHTML = '';
-
-    // Создаем элемент для виджета
-    const widgetScript = document.createElement('script');
-    widgetScript.async = true;
-    widgetScript.setAttribute('data-telegram-login', BOT_USERNAME);
-    widgetScript.setAttribute('data-size', buttonSize);
-    widgetScript.setAttribute('data-onauth', 'TelegramLoginWidget.dataOnauth(user)');
-    widgetScript.setAttribute('data-request-access', 'write');
-    widgetScript.setAttribute('data-userpic', showUserPhoto ? 'true' : 'false');
-    
-    // Используем текущий URL для redirect (или можно указать конкретный)
-    const redirectUrl = encodeURIComponent(window.location.href);
-    widgetScript.setAttribute('data-auth-url', `${window.location.origin}/api/auth/telegram-widget`);
-
-    widgetContainerRef.current.appendChild(widgetScript);
-    setIsWidgetLoaded(true);
-    
-    console.log('🎯 Telegram Widget initialized');
-  };
-
+  
+  // Глобальный callback для обработки аутентификации
   const handleTelegramAuth = async (userData: any) => {
-    console.log('🔐 Telegram Widget auth data received:', userData);
-    
     try {
-      // Отправляем данные на бэкенд для верификации и создания сессии
+      console.log('📨 Received Telegram Widget auth data:', userData);
+      setIsLoading(true);
+      
       const result = await loginWithTelegramWidget(userData);
       
       if (result.success) {
-        console.log('✅ Telegram Widget authentication successful');
+        console.log('✅ Telegram Widget auth successful');
         onAuthSuccess?.(userData);
       } else {
-        console.error('❌ Telegram Widget authentication failed:', result.error);
-        setWidgetError(result.error || 'Authentication failed');
-        onAuthError?.(result.error);
+        const errorMsg = result.error || 'Authentication failed';
+        console.error('❌ Telegram Widget auth failed:', errorMsg);
+        setError(errorMsg);
+        onAuthError?.(errorMsg);
       }
-    } catch (error: any) {
-      console.error('❌ Telegram Widget authentication error:', error);
-      setWidgetError(error.message || 'Authentication error');
-      onAuthError?.(error);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unexpected authentication error';
+      console.error('❌ Unexpected auth error:', err);
+      setError(errorMsg);
+      onAuthError?.(errorMsg);
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  useEffect(() => {
+    // Регистрируем глобальную функцию для callback Telegram
+    window.onTelegramAuth = handleTelegramAuth;
+
+    let script: HTMLScriptElement | null = null;
+    let widgetDiv: HTMLDivElement | null = null;
+    const container = widgetContainerRef.current;
+
+    const initializeWidget = () => {
+      if (!container) {
+        setError('Widget container not found');
+        return;
+      }
+
+      try {
+        // ОЧИСТКА: Аккуратно удаляем предыдущий виджет
+        const existingScript = document.getElementById('telegram-widget-script');
+        const existingWidget = container.querySelector('.telegram-widget');
+        
+        if (existingScript?.parentNode) {
+          existingScript.parentNode.removeChild(existingScript);
+        }
+        if (existingWidget?.parentNode) {
+          existingWidget.parentNode.removeChild(existingWidget);
+        }
+
+        // СОЗДАНИЕ: Создаем контейнер для виджета
+        widgetDiv = document.createElement('div');
+        widgetDiv.className = 'telegram-widget';
+        container.appendChild(widgetDiv);
+
+        // ЗАГРУЗКА: Динамически загружаем скрипт виджета
+        script = document.createElement('script');
+        script.id = 'telegram-widget-script';
+        script.src = 'https://telegram.org/js/telegram-widget.js?22';
+        script.async = true;
+        script.setAttribute('data-telegram-login', 'Family_Space_MVP_bot');
+        script.setAttribute('data-size', buttonSize);
+        script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+        script.setAttribute('data-request-access', 'write');
+        script.setAttribute('data-userpic', showUserPhoto ? 'true' : 'false');
+        
+        script.onload = () => {
+          console.log('✅ Telegram Widget script loaded successfully');
+          setIsLoading(false);
+          setError(null);
+        };
+        
+        script.onerror = () => {
+          const errorMsg = 'Failed to load Telegram Widget script';
+          console.error('❌', errorMsg);
+          setError(errorMsg);
+          setIsLoading(false);
+          onAuthError?.(errorMsg);
+        };
+
+        document.body.appendChild(script);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : 'Failed to initialize widget';
+        console.error('❌ Widget initialization error:', err);
+        setError(errorMsg);
+        setIsLoading(false);
+        onAuthError?.(errorMsg);
+      }
+    };
+
+    // Задержка для гарантии готовности DOM
+    const timer = setTimeout(initializeWidget, 100);
+    
+    return () => {
+      clearTimeout(timer);
+      
+      // КОРРЕКТНАЯ ОЧИСТКА: Удаляем только наши элементы :cite[6]
+      if (script?.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+      
+      if (widgetDiv?.parentNode) {
+        widgetDiv.parentNode.removeChild(widgetDiv);
+      }
+      
+      // Осторожно с глобальной функцией
+      if (window.onTelegramAuth === handleTelegramAuth) {
+        delete window.onTelegramAuth;
+      }
+    };
+  }, [loginWithTelegramWidget, onAuthSuccess, onAuthError, buttonSize, showUserPhoto]);
+
   const reloadWidget = () => {
-    setIsWidgetLoaded(false);
-    setWidgetError(null);
-    loadWidget();
+    setError(null);
+    setIsLoading(true);
+    // Принудительная переинициализация через небольшой таймаут
+    setTimeout(() => {
+      const initializeWidget = () => {
+        const container = widgetContainerRef.current;
+        if (!container) return;
+
+        const existingScript = document.getElementById('telegram-widget-script');
+        const existingWidget = container.querySelector('.telegram-widget');
+        
+        if (existingScript?.parentNode) {
+          existingScript.parentNode.removeChild(existingScript);
+        }
+        if (existingWidget?.parentNode) {
+          existingWidget.parentNode.removeChild(existingWidget);
+        }
+
+        // Пересоздаем виджет
+        const widgetDiv = document.createElement('div');
+        widgetDiv.className = 'telegram-widget';
+        container.appendChild(widgetDiv);
+
+        const script = document.createElement('script');
+        script.id = 'telegram-widget-script';
+        script.src = 'https://telegram.org/js/telegram-widget.js?22';
+        script.async = true;
+        script.setAttribute('data-telegram-login', 'Family_Space_MVP_bot');
+        script.setAttribute('data-size', buttonSize);
+        script.setAttribute('data-onauth', 'onTelegramAuth(user)');
+        script.setAttribute('data-request-access', 'write');
+        script.setAttribute('data-userpic', showUserPhoto ? 'true' : 'false');
+
+        script.onload = () => {
+          setIsLoading(false);
+          setError(null);
+        };
+
+        script.onerror = () => {
+          setError('Failed to reload Telegram widget');
+          setIsLoading(false);
+        };
+
+        document.body.appendChild(script);
+      };
+      initializeWidget();
+    }, 300);
   };
 
   return (
     <div className="telegram-auth-widget">
-      {widgetError ? (
-        <div className="widget-error">
+      <h3>Войти через Telegram</h3>
+      <p>Авторизуйтесь для доступа к FamilySpace</p>
+      
+      <div 
+        ref={widgetContainerRef} 
+        className="widget-container"
+        style={{ minHeight: '50px', position: 'relative' }}
+      />
+      
+      {/* Состояние загрузки */}
+      {isLoading && (
+        <div className="widget-loading-state">
+          <div className="loading-spinner"></div>
+          <span>Загрузка виджета Telegram...</span>
+        </div>
+      )}
+      
+      {/* Состояние ошибки */}
+      {error && !isLoading && (
+        <div className="widget-error-state">
           <div className="error-message">
-            <strong>Ошибка:</strong> {widgetError}
+            <strong>Ошибка:</strong> {error}
           </div>
           <button 
             className="reload-button"
             onClick={reloadWidget}
+            type="button"
           >
             🔄 Попробовать снова
           </button>
-        </div>
-      ) : (
-        <div className="widget-container">
-          <div 
-            ref={widgetContainerRef}
-            className="widget-placeholder"
-          >
-            {!isWidgetLoaded && (
-              <div className="widget-loading">
-                <div className="loading-spinner"></div>
-                <div>Загрузка Telegram Widget...</div>
-              </div>
-            )}
-          </div>
-          
-          <div className="widget-info">
-            <p>После авторизации вы будете перенаправлены обратно в приложение</p>
-          </div>
         </div>
       )}
     </div>
   );
 };
-
-export default TelegramAuthWidget;
