@@ -3,24 +3,25 @@ import { authInit, testAuth, testHashValidation, telegramWidgetAuth } from '../c
 
 const router = Router();
 
-// 🔍 Явный обработчик для preflight-запроса к /auth/test
+// Явный обработчик для preflight-запроса к /auth/test (и, через монтирование, к /api/auth/test)
 router.options('/test', (req, res) => {
   console.log('🟢 OPTIONS /auth/test handler was called successfully');
-  
-  // Добавляем CORS-заголовки вручную для диагностики
+
+  // Добавляем CORS-заголовки вручную для диагностики / совместимости
   res.header('Access-Control-Allow-Origin', 'https://familyspace-tma.vercel.app');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  res.header('Access-Control-Allow-Credentials', 'true');
+
   console.log('📤 Manually set CORS headers for OPTIONS request');
-  res.status(200).send();
+  return res.sendStatus(200);
 });
 
-// Существующие роуты (пути указаны БЕЗ префикса /auth)
+// Роуты аутентификации (пути указаны БЕЗ префикса /auth)
 router.post('/init', authInit);
 router.post('/test', testAuth);
 router.post('/test-hash', testHashValidation);
-// 🆕 Добавленный роут для виджета Telegram
+// Роут для Telegram Widget
 router.post('/telegram-widget', telegramWidgetAuth);
 
 export default router;

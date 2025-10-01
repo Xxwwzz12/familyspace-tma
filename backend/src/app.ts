@@ -4,7 +4,7 @@ import cors from 'cors';
 import { mainRouter } from './routes';
 import authRoutes from './routes/auth.routes';
 
-// Проверка критически важных переменных окружения при старте:cite[4]
+// Проверка критически важных переменных окружения при старте
 const requiredEnvVars = ['BOT_TOKEN', 'DATABASE_URL'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
@@ -17,10 +17,7 @@ console.log('✅ Все необходимые переменные окруже
 
 const app = express();
 
-// 1. Безопасность: Подключаем Helmet первым:cite[10]
-app.use(helmet());
-
-// 2. Настройка CORS:cite[6]:cite[8]
+// --- CORS whitelist ---
 const allowedOrigins = [
   'http://localhost:5173', // Фронтенд для разработки
   'https://familyspace-tma.vercel.app', // Ваш продакшн-фронтенд
@@ -28,7 +25,7 @@ const allowedOrigins = [
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Разрешаем запросы с отсутствующим origin (например, мобильные приложения, Postman):cite[6]
+    // Разрешаем запросы с отсутствующим origin (например, Postman) и доверенным origin
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -36,18 +33,43 @@ const corsOptions: cors.CorsOptions = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true, // Разрешить отправку кук и заголовков авторизации:cite[3]
+  credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  optionsSuccessStatus: 200 // Для совместимости со старыми браузерами:cite[6]
+  optionsSuccessStatus: 200
 };
 
-app.use(cors(corsOptions)); // Подключаем CORS middleware ДО всех маршрутов:cite[1]
+// 0) Подключаем CORS ПЕРЕД helmet, чтобы заголовки были установлены как можно раньше
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // явная обработка preflight для всех путей
 
-// 3. Парсер для JSON
+// 0.5) Резервная "echo" middleware — гарантируем установку CORS-заголовков для всех ответов.
+// Это полезно на платформах/проксях, где какие-то заголовки могут быть перезаписаны.
+app.use((req, res, next) => {
+  const origin = req.headers.origin as string | undefined;
+  if (origin && allowedOrigins.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-Requested-With'
+  );
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// 1) Безопасность: Helmet (после CORS)
+app.use(helmet());
+
+// 2) Парсер для JSON
 app.use(express.json());
 
-// 4. Логирование всех входящих запросов:cite[2]
+// 3) Логирование всех входящих запросов и лог заголовков ответа
 app.use((req, res, next) => {
   console.log('🔔 Incoming Request:', {
     timestamp: new Date().toISOString(),
@@ -56,15 +78,25 @@ app.use((req, res, next) => {
     origin: req.headers.origin,
     'user-agent': req.headers['user-agent']
   });
+
+  res.on('finish', () => {
+    try {
+      const outHeaders = res.getHeaders();
+      console.log('📤 Response headers sent for', req.method, req.url, outHeaders);
+    } catch (err) {
+      console.warn('Не удалось прочитать заголовки ответа', err);
+    }
+  });
+
   next();
 });
 
-// 5. Подключение маршрутов
-app.use('/auth', authRoutes); // Оригинальный путь
-app.use('/api/auth', authRoutes); // Дублирующий путь для Vercel rewrites
+// 4) Подключение маршрутов
+app.use('/auth', authRoutes);        // оригинальный путь
+app.use('/api/auth', authRoutes);    // дублирующий путь для Vercel rewrites (/api/* -> функция)
 app.use('/api', mainRouter);
 
-// 6. Health-check маршрут
+// 5) Health-check
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
