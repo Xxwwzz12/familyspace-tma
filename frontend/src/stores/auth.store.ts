@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiClient } from '../utils/apiClient';
 
-// Интерфейсы для типизации
 interface User {
   id: string;
   firstName: string;
@@ -11,7 +10,6 @@ interface User {
 }
 
 interface AuthState {
-  // Состояния
   token: string | null;
   user: User | null;
   isAuthenticated: boolean;
@@ -20,14 +18,11 @@ interface AuthState {
   authMethod: 'telegram' | 'widget' | 'none';
   error: string | null;
   
-  // Методы аутентификации
   initializeAuth: (initDataRaw: string | null) => Promise<void>;
   loginWithTelegramWidget: (widgetData: any) => Promise<AuthResult>;
   testAuth: () => Promise<void>;
   login: (user: User, token: string) => void;
   logout: () => void;
-  
-  // Сеттеры
   setToken: (token: string | null) => void;
   setUser: (user: User | null) => void;
   setInitialized: (initialized: boolean) => void;
@@ -36,8 +31,7 @@ interface AuthState {
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set, get) => ({
-      // Начальное состояние
+    (set) => ({
       token: null,
       user: null,
       isAuthenticated: false,
@@ -47,28 +41,28 @@ export const useAuthStore = create<AuthState>()(
       error: null,
 
       /**
-       * Инициализация аутентификации
-       * @param initDataRaw - данные из Telegram Mini Apps или null для тестовой аутентификации
+       * Инициализирует аутентификацию пользователя
+       * @param initDataRaw - Сырые данные инициализации Telegram Web App или null для тестовой аутентификации
        */
       initializeAuth: async (initDataRaw: string | null) => {
-        console.log('🔄 Инициализация аутентификации с initDataRaw:', initDataRaw);
+        console.log('🔄 initializeAuth called with initDataRaw:', initDataRaw);
         set({ isLoading: true, error: null });
         
         try {
           let response;
           
           if (initDataRaw) {
-            // Аутентификация через Telegram Mini Apps
-            console.log('🔐 Аутентификация через Telegram initData');
-            console.log('📤 Отправка initData длиной:', initDataRaw.length);
+            // 🟢 ОБНОВЛЕННЫЙ ПУТЬ: Добавлен префикс /api/
+            console.log('🔐 Authenticating with Telegram initData');
+            console.log('📤 Sending initData length:', initDataRaw.length);
             
-            response = await apiClient.post('/auth/init', { 
+            response = await apiClient.post('/api/auth/init', { 
               initData: initDataRaw 
             });
           } else {
-            // Тестовая аутентификация (fallback)
-            console.log('🧪 Использование тестовой аутентификации');
-            response = await apiClient.post('/auth/test');
+            // 🟢 ОБНОВЛЕННЫЙ ПУТЬ: Добавлен префикс /api/
+            console.log('🧪 Using test authentication (initDataRaw is null)');
+            response = await apiClient.post('/api/auth/test');
           }
           
           const { user, token } = response.data;
@@ -91,24 +85,37 @@ export const useAuthStore = create<AuthState>()(
             error: null
           });
           
-          console.log('✅ Аутентификация успешна, пользователь:', user);
+          console.log('✅ Authentication successful:', user);
         } catch (error: any) {
-          console.error('❌ Ошибка аутентификации:', error);
+          console.error('❌ Authentication failed:', error);
           
           // Детальная обработка ошибок
           if (error.response) {
             const status = error.response.status;
             const message = error.response.data?.message || error.response.statusText;
             
-            console.log(`⚙️ Ошибка сервера ${status}:`, message);
+            console.log(`⚙️ Server error ${status}:`, message);
             
             if (status === 401) {
-              set({ error: 'Ошибка аутентификации: Неверные учетные данные' });
+              console.log('🔐 InitData validation failed on server');
+              set({ error: 'Authentication failed: Invalid credentials' });
+            } else if (status === 400) {
+              console.log('📝 Bad request: Invalid initData format');
+              set({ error: 'Authentication failed: Invalid request format' });
             } else if (status === 500) {
-              set({ error: 'Ошибка аутентификации: Ошибка сервера' });
+              console.log('⚙️ Server error during authentication');
+              set({ error: 'Authentication failed: Server error' });
             } else {
-              set({ error: `Ошибка аутентификации: ${message}` });
+              set({ error: `Authentication failed: ${message}` });
             }
+          } else if (error.request) {
+            // Ошибка сети (нет ответа от сервера)
+            console.log('🌐 Network error: No response from server');
+            set({ error: 'Authentication failed: Network error - please check your connection' });
+          } else {
+            // Другие ошибки
+            console.log('❓ Other error:', error.message);
+            set({ error: `Authentication failed: ${error.message}` });
           }
           
           set({ 
@@ -124,11 +131,12 @@ export const useAuthStore = create<AuthState>()(
        * @param widgetData - данные из Telegram Widget
        */
       loginWithTelegramWidget: async (widgetData: any) => {
-        console.log('🌐 Запуск аутентификации через Telegram Widget...');
+        console.log('🌐 Starting Telegram Widget authentication...');
         set({ isLoading: true, error: null });
         
         try {
-          const response = await apiClient.post('/auth/widget', widgetData);
+          // 🟢 ОБНОВЛЕННЫЙ ПУТЬ: Добавлен префикс /api/
+          const response = await apiClient.post('/api/auth/widget', widgetData);
           const { user, token } = response.data;
           
           // Сохраняем токен
@@ -145,7 +153,7 @@ export const useAuthStore = create<AuthState>()(
             error: null
           });
           
-          console.log('✅ Аутентификация через Telegram Widget успешна');
+          console.log('✅ Telegram Widget authentication successful');
           
           return {
             success: true,
@@ -153,9 +161,9 @@ export const useAuthStore = create<AuthState>()(
             token
           };
         } catch (error: any) {
-          console.error('❌ Ошибка аутентификации через Widget:', error);
+          console.error('❌ Telegram Widget authentication error:', error);
           
-          const errorMessage = error.response?.data?.message || 'Ошибка аутентификации через виджет';
+          const errorMessage = error.response?.data?.message || 'Telegram Widget authentication error';
           set({ 
             error: errorMessage,
             isLoading: false 
@@ -172,11 +180,12 @@ export const useAuthStore = create<AuthState>()(
        * Тестовая аутентификация
        */
       testAuth: async () => {
-        console.log('🛜 Вызов тестовой аутентификации');
+        console.log('🛜 testAuth called');
         set({ isLoading: true, error: null });
         
         try {
-          const response = await apiClient.post('/auth/test');
+          // 🟢 ОБНОВЛЕННЫЙ ПУТЬ: Добавлен префикс /api/
+          const response = await apiClient.post('/api/auth/test');
           const { user, token } = response.data;
           
           if (typeof window !== 'undefined') {
@@ -192,11 +201,11 @@ export const useAuthStore = create<AuthState>()(
             error: null
           });
           
-          console.log('✅ Тестовая аутентификация успешна:', user);
+          console.log('✅ Test authentication successful:', user);
         } catch (error: any) {
-          console.error('❌ Ошибка тестовой аутентификации:', error);
+          console.error('❌ Test authentication failed:', error);
           set({ 
-            error: 'Ошибка тестовой аутентификации',
+            error: 'Test authentication failed',
             isLoading: false 
           });
           throw error;
@@ -207,7 +216,7 @@ export const useAuthStore = create<AuthState>()(
        * Логин с готовыми данными
        */
       login: (user: User, token: string) => {
-        console.log('🔐 Логин с пользователем:', user);
+        console.log('🔐 Login with user:', user);
         
         if (typeof window !== 'undefined') {
           localStorage.setItem('auth_token', token);
@@ -227,7 +236,7 @@ export const useAuthStore = create<AuthState>()(
        * Выход из системы
        */
       logout: () => {
-        console.log('🚪 Выход из системы');
+        console.log('🚪 Logout called');
         
         if (typeof window !== 'undefined') {
           localStorage.removeItem('auth_token');
@@ -243,19 +252,18 @@ export const useAuthStore = create<AuthState>()(
         });
       },
 
-      // Сеттеры для управления состоянием
       setToken: (token: string | null) => {
-        console.log('🔑 Установка токена:', token);
+        console.log('🔑 setToken called with:', token);
         set({ token });
       },
 
       setUser: (user: User | null) => {
-        console.log('👤 Установка пользователя:', user);
+        console.log('👤 setUser called with:', user);
         set({ user });
       },
 
       setInitialized: (initialized: boolean) => {
-        console.log('🏁 Установка isInitialized:', initialized);
+        console.log('🏁 setInitialized called with:', initialized);
         set({ isInitialized: initialized });
       },
 
@@ -266,7 +274,7 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'auth-storage',
       onRehydrateStorage: () => (state) => {
-        console.log('💾 Состояние восстановлено', state);
+        console.log('💾 Storage rehydrated', state);
         if (state && typeof state === 'object') {
           return { ...state, isLoading: false };
         }

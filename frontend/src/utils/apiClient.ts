@@ -1,10 +1,11 @@
 import axios from 'axios';
 
-// Базовый URL API: используем переменную окружения VITE_API_URL, если не задана - localhost:3000/api
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+const baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
 
 export const apiClient = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: baseURL,
+  withCredentials: false, // 🟡 Установите в true, если бэкенд использует куки или аутентификационные заголовки
+  timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
   },
