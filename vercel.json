@@ -7,15 +7,29 @@
       "use": "@vercel/static-build"
     },
     {
-      "src": "backend/api/index.ts",
+      "src": "backend/api/**/*.ts",
       "use": "@vercel/node"
     }
   ],
   "routes": [
+    // 🔧 CORS headers for API routes - handles preflight OPTIONS requests
+    {
+      "src": "/api/(.*)",
+      "methods": ["OPTIONS"],
+      "headers": {
+        "Access-Control-Allow-Origin": "https://familyspace-tma.vercel.app",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization, X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Date, X-Api-Version",
+        "Access-Control-Max-Age": "86400"
+      },
+      "continue": false
+    },
+    // 🚀 Main API route proxy to your backend
     {
       "src": "/api/(.*)",
       "dest": "/backend/api/index.ts"
     },
+    // 🌐 Serve frontend static files for all other routes
     {
       "src": "/(.*)",
       "dest": "/frontend/dist/$1"
