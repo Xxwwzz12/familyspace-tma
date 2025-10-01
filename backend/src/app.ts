@@ -19,10 +19,18 @@ console.log('✅ All required environment variables are set');
 const app = express();
 
 app.use(helmet());
+
+// Настройка CORS
 app.use(cors({
-  origin: ['http://localhost:5173', 'https://familyspace-tma.vercel.app'],
-  credentials: true,
+  origin: [
+    'http://localhost:5173', // Ваш фронтенд при разработке
+    'https://familyspace-tma.vercel.app', // Ваш фронтенд на Vercel
+  ],
+  credentials: true, // Разрешить передачу куки и заголовков авторизации:cite[1]:cite[5]
+  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Явно указать разрешенные методы:cite[4]
+  allowedHeaders: ['Content-Type', 'Authorization'], // Разрешенные заголовки:cite[4]
 }));
+
 app.use(express.json());
 
 // Логирование всех входящих запросов
