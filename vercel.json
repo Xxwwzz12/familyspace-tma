@@ -7,12 +7,11 @@
       "use": "@vercel/static-build"
     },
     {
-      "src": "backend/api/**/*.ts",
+      "src": "backend/api/index.ts",
       "use": "@vercel/node"
     }
   ],
   "routes": [
-    // 🔧 CORS headers for API routes - handles preflight OPTIONS requests
     {
       "src": "/api/(.*)",
       "methods": ["OPTIONS"],
@@ -24,12 +23,10 @@
       },
       "continue": false
     },
-    // 🚀 Main API route proxy to your backend
     {
       "src": "/api/(.*)",
       "dest": "/backend/api/index.ts"
     },
-    // 🌐 Serve frontend static files for all other routes
     {
       "src": "/(.*)",
       "dest": "/frontend/dist/$1"
