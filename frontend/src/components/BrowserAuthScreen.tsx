@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../stores/auth.store';
-import TelegramAuthWidget from './TelegramAuthWidget';
+import { TelegramAuthWidget } from './TelegramAuthWidget'; // Исправлен импорт
 import './BrowserAuthScreen.css';
 
 const BrowserAuthScreen: React.FC = () => {
