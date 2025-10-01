@@ -1,29 +1,34 @@
-// backend/src/app.ts
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import { mainRouter } from './routes';
+import authRoutes from './routes/auth.routes';
 
-// Проверка критически важных переменных окружения при старте
+// Проверка критически важных переменных окружения при старте:cite[4]
 const requiredEnvVars = ['BOT_TOKEN', 'DATABASE_URL'];
 const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingVars.length > 0) {
   console.error('❌ Отсутствуют необходимые переменные окружения:', missingVars);
+  console.log('Доступные переменные окружения:', Object.keys(process.env));
   process.exit(1);
 }
 console.log('✅ Все необходимые переменные окружения установлены');
 
 const app = express();
 
-// --- CORS whitelist ---
+// 1. Безопасность: Подключаем Helmet первым:cite[10]
+app.use(helmet());
+
+// 2. Настройка CORS:cite[6]:cite[8]
 const allowedOrigins = [
-  'http://localhost:5173',
-  'https://familyspace-tma.vercel.app',
-  // можно добавить другие доверенные домены
+  'http://localhost:5173', // Фронтенд для разработки
+  'https://familyspace-tma.vercel.app', // Ваш продакшн-фронтенд
 ];
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
+    // Разрешаем запросы с отсутствующим origin (например, мобильные приложения, Postman):cite[6]
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -31,90 +36,35 @@ const corsOptions: cors.CorsOptions = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true,
+  credentials: true, // Разрешить отправку кук и заголовков авторизации:cite[3]
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  optionsSuccessStatus: 200 // Для совместимости со старыми браузерами:cite[6]
 };
 
-// ------------------------
-// 1) Явная CORS middleware ПЕРЕД helmet
-// ------------------------
-app.use((req, res, next) => {
-  const origin = req.headers.origin as string | undefined;
+app.use(cors(corsOptions)); // Подключаем CORS middleware ДО всех маршрутов:cite[1]
 
-  if (origin && allowedOrigins.includes(origin)) {
-    // Эхо-origin — безопаснее чем '*', когда нужны credentials
-    res.setHeader('Access-Control-Allow-Origin', origin);
-  }
-  // Для отладки можно временно раскомментировать:
-  // else res.setHeader('Access-Control-Allow-Origin', '*');
-
-  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'Content-Type, Authorization, X-Requested-With'
-  );
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-
-  if (req.method === 'OPTIONS') {
-    // Быстрый ответ на preflight, не пропускаем дальше
-    return res.sendStatus(200);
-  }
-  next();
-});
-
-// ------------------------
-// 2) CORS middleware (как backup)
-// ------------------------
-app.use(cors(corsOptions));
-
-// ------------------------
-// 3) security middleware
-// ------------------------
-app.use(helmet());
-
-// ------------------------
-// 4) Парсер JSON
-// ------------------------
+// 3. Парсер для JSON
 app.use(express.json());
 
-// ------------------------
-// 5) Логирование входящих запросов
-// ------------------------
+// 4. Логирование всех входящих запросов:cite[2]
 app.use((req, res, next) => {
   console.log('🔔 Incoming Request:', {
     timestamp: new Date().toISOString(),
     method: req.method,
     url: req.url,
     origin: req.headers.origin,
-    'user-agent': req.headers['user-agent'],
+    'user-agent': req.headers['user-agent']
   });
-
-  // После завершения запроса логируем какие заголовки реально ушли клиенту
-  res.on('finish', () => {
-    try {
-      const outHeaders = res.getHeaders();
-      console.log('📤 Response headers sent for', req.method, req.url, outHeaders);
-    } catch (err) {
-      console.warn('Не удалось прочитать заголовки ответа', err);
-    }
-  });
-
   next();
 });
 
-// ------------------------
-// 6) Роуты (порядок важен)
-// ------------------------
-import authRoutes from './routes/auth.routes';
-import { mainRouter } from './routes';
-
-app.use('/auth', authRoutes);
+// 5. Подключение маршрутов
+app.use('/auth', authRoutes); // Оригинальный путь
+app.use('/api/auth', authRoutes); // Дублирующий путь для Vercel rewrites
 app.use('/api', mainRouter);
 
-// ------------------------
-// 7) Health-check
-// ------------------------
+// 6. Health-check маршрут
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
