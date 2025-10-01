@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authInit, testAuth, testHashValidation } from '../controllers/auth.controller';
+import { authInit, testAuth, testHashValidation, telegramWidgetAuth } from '../controllers/auth.controller';
 
 const router = Router();
 
@@ -16,9 +16,11 @@ router.options('/test', (req, res) => {
   res.status(200).send();
 });
 
-// Существующие роуты
+// Существующие роуты (пути указаны БЕЗ префикса /auth)
 router.post('/init', authInit);
 router.post('/test', testAuth);
 router.post('/test-hash', testHashValidation);
+// 🆕 Добавленный роут для виджета Telegram
+router.post('/telegram-widget', telegramWidgetAuth);
 
 export default router;

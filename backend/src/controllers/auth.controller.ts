@@ -4,7 +4,7 @@ import { validateInitData } from '../services/telegram-auth.service';
 import { findOrCreateUser } from '../services/user.service';
 import { generateToken } from '../services/jwt.service';
 
-// Основной эндпоинт аутентификации
+// Основной эндпоинт аутентификации через Telegram WebApp
 export const authInit = async (req: Request, res: Response): Promise<void> => {
   try {
     const { initData } = req.body;
@@ -96,7 +96,7 @@ export const authInit = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-// Эндпоинт для тестирования
+// Эндпоинт для тестирования (создает уникальных пользователей)
 export const testAuth = async (req: Request, res: Response): Promise<void> => {
   try {
     console.log('🟢 POST /auth/test handler was called');
@@ -121,7 +121,7 @@ export const testAuth = async (req: Request, res: Response): Promise<void> => {
     
     console.log('✅ Test auth successful for user:', user.id);
 
-    // 🔍 Явно логируем отправляемые заголовки
+    // Логируем отправляемые заголовки для отладки CORS
     const headers = res.getHeaders();
     console.log('📤 Response headers being sent:', Object.fromEntries(Object.entries(headers)));
 
@@ -226,8 +226,7 @@ export const telegramWidgetAuth = async (req: Request, res: Response): Promise<v
       auth_date: widgetData.auth_date
     });
 
-    // 🔄 ВАЖНО: Здесь нужно реализовать валидацию хэша Telegram Widget
-    // Для демо временно пропускаем проверку, но в продакшене ОБЯЗАТЕЛЬНО
+    // ВАЖНО: Временная заглушка валидации хэша
     const isHashValid = await validateTelegramWidgetHash(widgetData);
     
     if (!isHashValid) {
@@ -291,7 +290,7 @@ export const telegramWidgetAuth = async (req: Request, res: Response): Promise<v
 };
 
 /**
- * Валидация хэша Telegram Widget данных
+ * Валидация хэша Telegram Widget данных (ВРЕМЕННАЯ ЗАГЛУШКА)
  * TODO: Реализовать по документации Telegram
  */
 const validateTelegramWidgetHash = async (widgetData: any): Promise<boolean> => {
