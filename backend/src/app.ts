@@ -1,8 +1,7 @@
+// backend/src/app.ts
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
-import { mainRouter } from './routes';
-import authRoutes from './routes/auth.routes';
 
 // Проверка критически важных переменных окружения при старте
 const requiredEnvVars = ['BOT_TOKEN', 'DATABASE_URL'];
@@ -16,19 +15,15 @@ console.log('✅ Все необходимые переменные окруже
 
 const app = express();
 
-// 1. Безопасность: Подключаем Helmet первым
-app.use(helmet());
-
-// 2. Настройка CORS
-// Белый список разрешенных доменов :cite[3]:cite[7]
+// --- CORS whitelist ---
 const allowedOrigins = [
-  'http://localhost:5173', // Фронтенд для разработки
-  'https://familyspace-tma.vercel.app', // Ваш продакшн-фронтенд
+  'http://localhost:5173',
+  'https://familyspace-tma.vercel.app',
+  // можно добавить другие доверенные домены
 ];
 
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
-    // Разрешаем запросы с отсутствующим origin (например, мобильные приложения, Postman) :cite[3]
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -36,33 +31,90 @@ const corsOptions: cors.CorsOptions = {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  credentials: true, // Разрешить отправку кук и заголовков авторизации :cite[1]
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], // Явно указанные разрешенные методы :cite[1]
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'], // Разрешенные заголовки :cite[1]
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 };
 
-app.use(cors(corsOptions)); // Подключаем CORS middleware ДО всех маршрутов :cite[5]
+// ------------------------
+// 1) Явная CORS middleware ПЕРЕД helmet
+// ------------------------
+app.use((req, res, next) => {
+  const origin = req.headers.origin as string | undefined;
 
-// 3. Парсер для JSON
+  if (origin && allowedOrigins.includes(origin)) {
+    // Эхо-origin — безопаснее чем '*', когда нужны credentials
+    res.setHeader('Access-Control-Allow-Origin', origin);
+  }
+  // Для отладки можно временно раскомментировать:
+  // else res.setHeader('Access-Control-Allow-Origin', '*');
+
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.setHeader(
+    'Access-Control-Allow-Headers',
+    'Content-Type, Authorization, X-Requested-With'
+  );
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+
+  if (req.method === 'OPTIONS') {
+    // Быстрый ответ на preflight, не пропускаем дальше
+    return res.sendStatus(200);
+  }
+  next();
+});
+
+// ------------------------
+// 2) CORS middleware (как backup)
+// ------------------------
+app.use(cors(corsOptions));
+
+// ------------------------
+// 3) security middleware
+// ------------------------
+app.use(helmet());
+
+// ------------------------
+// 4) Парсер JSON
+// ------------------------
 app.use(express.json());
 
-// 4. Логирование всех входящих запросов
+// ------------------------
+// 5) Логирование входящих запросов
+// ------------------------
 app.use((req, res, next) => {
   console.log('🔔 Incoming Request:', {
     timestamp: new Date().toISOString(),
     method: req.method,
     url: req.url,
     origin: req.headers.origin,
-    'user-agent': req.headers['user-agent']
+    'user-agent': req.headers['user-agent'],
   });
+
+  // После завершения запроса логируем какие заголовки реально ушли клиенту
+  res.on('finish', () => {
+    try {
+      const outHeaders = res.getHeaders();
+      console.log('📤 Response headers sent for', req.method, req.url, outHeaders);
+    } catch (err) {
+      console.warn('Не удалось прочитать заголовки ответа', err);
+    }
+  });
+
   next();
 });
 
-// 5. Подключение маршрутов
+// ------------------------
+// 6) Роуты (порядок важен)
+// ------------------------
+import authRoutes from './routes/auth.routes';
+import { mainRouter } from './routes';
+
 app.use('/auth', authRoutes);
 app.use('/api', mainRouter);
 
-// 6. Health-check маршрут
+// ------------------------
+// 7) Health-check
+// ------------------------
 app.get('/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
 });
