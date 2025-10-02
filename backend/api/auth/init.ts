@@ -18,16 +18,35 @@ export default async function handler(request: VercelRequest, response: VercelRe
     console.log('🔄 Handling OPTIONS request');
     return response.status(200).end();
   }
+
+  // === РАБОТА С ТЕЛОМ ЗАПРОСА ===
+  let parsedBody = request.body;
   
+  // Если тело запроса - строка, попробуем распарсить её как JSON
+  if (typeof parsedBody === 'string') {
+    if (parsedBody.trim() === '') {
+      console.log('⚠️ Empty request body');
+      return response.status(400).json({ error: 'Request body is empty' });
+    }
+    try {
+      parsedBody = JSON.parse(parsedBody);
+    } catch (parseError) {
+      console.error('❌ JSON parse error:', parseError);
+      return response.status(400).json({ error: 'Invalid JSON in request body' });
+    }
+  }
+  // ===============================
+
   if (request.method !== 'POST') {
     console.log('❌ Method not allowed:', request.method);
     return response.status(405).json({ error: 'Method not allowed' });
   }
   
   try {
-    const { initData } = request.body;
+    // Используем распаршенное тело
+    const { initData } = parsedBody;
     
-    console.log('📦 Request body:', request.body);
+    console.log('📦 Parsed request body:', parsedBody);
     
     if (!initData) {
       console.log('⚠️ initData is missing');
