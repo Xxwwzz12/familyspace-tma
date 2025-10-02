@@ -1,5 +1,5 @@
 // backend/api/index.ts
+import serverless from 'serverless-http';
 import app from '../src/app';
 
-// Просто экспортируем Express app как handler для Vercel
-export default app;
+export default serverless(app);
