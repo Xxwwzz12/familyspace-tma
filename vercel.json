@@ -4,10 +4,13 @@
   "builds": [
     {
       "src": "frontend/package.json",
-      "use": "@vercel/static-build"
+      "use": "@vercel/static-build",
+      "config": {
+        "outputDirectory": "frontend/dist"
+      }
     },
     {
-      "src": "backend/api/index.ts",
+      "src": "backend/api/**/*.ts",
       "use": "@vercel/node"
     }
   ],
