@@ -1,7 +1,6 @@
 // backend/api/ping.ts
-import { VercelRequest, VercelResponse } from '@vercel/node';
-
-export default function handler(req: VercelRequest, res: VercelResponse) {
+export default function handler(req: any, res: any) {
   res.setHeader('x-test-ping', '1');
-  res.json({ ok: true, time: new Date().toISOString() });
+  res.setHeader('Content-Type', 'application/json');
+  res.end(JSON.stringify({ ok: true, time: new Date().toISOString() }));
 }
