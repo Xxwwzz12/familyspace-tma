@@ -46,7 +46,8 @@ const corsOptions: cors.CorsOptions = {
 
 // 0) Подключаем CORS ПЕРЕД helmet
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+
+// УДАЛЕНО: app.options('*', cors(corsOptions));
 
 // 0.5) Резервная "echo" middleware
 app.use((req, res, next) => {
