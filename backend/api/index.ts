@@ -1,6 +1,6 @@
-// api/index.ts
+// backend/api/index.ts
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import app from '../backend/src/app'; // <-- поправленный путь: из api/ в backend/src/app
+import app from '../src/app'; // <-- правильный путь
 
 // Экспортируем handler для Vercel — проксируем запросы в Express app
 export default function handler(req: VercelRequest, res: VercelResponse) {
